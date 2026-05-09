@@ -1,0 +1,114 @@
+# Mode: _location-gate — Skip roles that don't fit the user's geography
+
+Runs after `modes/_fetch.md` has saved a JD under `jds/{NUM}-*.md` and before
+`modes/_eval.md` spends tokens scoring it. Cheap, deterministic, honest —
+when a role can't work geographically, skip it with the evidence quoted.
+
+## Input
+
+- `NUM` from the fetch stage
+- `jds/{NUM}-*.md` (the saved JD with its populated location header fields)
+
+## Step 1 — Load policy
+
+Read `config/profile.yml` → `location_policy` block. If the block is missing:
+
+- Log one warning: `location_policy missing from config/profile.yml — gate disabled, everything passes`.
+- Return `ALLOW`.
+
+If present, pull these fields (with defaults in case of partial config):
+
+| Field | Used by rule(s) |
+|-------|-----------------|
+| `home_country` | rules 1, 2 |
+| `home_timezone` | rule 5 |
+| `timezone_tolerance_hours` (default 1) | rule 5 |
+| `us_work_authorization` (default true) | rule 3 |
+| `relocation_open` (default false) | rule 4 |
+| `remote_allowed_scopes` (default `[home_country]`) | rule 1 |
+| `skip_on` (list of rule ids) | which rules are enabled |
+
+## Step 2 — Read the JD header
+
+From `jds/{NUM}-*.md` take the five location header fields:
+
+- `**Location:**`
+- `**Remote scope:**`
+- `**Timezone:**`
+- `**Visa/authorization:**`
+- `**Relocation offered:**`
+
+Plus the body text — you may need a direct quote for the evidence string.
+
+## Step 3 — Apply the enabled rules
+
+Check each rule in `skip_on`. Stop at the first SKIP and report it. If all
+enabled rules pass, return ALLOW.
+
+### Rule 1: `remote_scope_excludes_home_country`
+
+Fail if **both** of these are true:
+
+- `Remote scope` indicates a restricted remote list that the home country is NOT in.
+  - Examples that fail: `full-remote-countries:US,CA` when home is Sweden; `full-remote-region:EU` is OK (EU includes Sweden, pass); `full-remote-countries:Spain,Portugal,Poland` when home is Sweden fails.
+- None of `remote_allowed_scopes` match the scope tokens.
+
+If the posting is `full-remote-global` or `full-remote-region:EU` (or similar superset), pass.
+
+### Rule 2: `onsite_outside_home_country`
+
+Fail if `Remote scope` starts with `onsite:` and the city is outside `home_country`. Hybrid-remote with occasional office visits does NOT trigger this rule.
+
+Evidence: quote the exact sentence from the JD that names the on-site city.
+
+### Rule 3: `us_work_auth_required`
+
+Fail if `Visa/authorization` indicates US work authorization required AND `us_work_authorization` is `false` in policy.
+
+Keywords that trigger: "Must have authorization to work in the US", "US citizens only", "H1B / OPT only", "Green card required", "No visa sponsorship available" (when combined with a US-located role).
+
+### Rule 4: `onsite_and_relocation_required`
+
+Fail if `Remote scope` starts with `onsite:` AND `Relocation offered` is `yes` (role requires relocation) AND `relocation_open` is `false` in policy.
+
+This is stricter than rule 2 — it catches roles that offer relocation packages to Sweden-based candidates but still require them to move.
+
+### Rule 5: `timezone_outside_home_tolerance`
+
+Fail if `Timezone` explicitly names a zone outside `home_timezone ± timezone_tolerance_hours`.
+
+Examples with `home_timezone: CET` and `timezone_tolerance_hours: 1`:
+
+- `"Must overlap 9am-5pm PST"` → PST is CET-9 → SKIP
+- `"EU timezones"` → passes (EU includes CET)
+- `"CET ±2"` → passes (within tolerance)
+- `"Any US timezone"` → PST/MST/CST/EST, range CET-9 to CET-6 → SKIP
+- `"Americas timezones"` → SKIP
+- `unspecified` → pass (no evidence to act on)
+
+## Step 4 — Emit the verdict
+
+### ALLOW
+
+Do nothing to the JD file. Return the string `ALLOW` to the caller. The
+orchestrator will invoke `modes/_eval.md` next.
+
+### SKIP
+
+1. Update the `data/applications.md` row for this NUM:
+   - `Status` column → `Skipped-Location`
+   - `Notes` column → `{rule-id}: "{quoted JD sentence}"`
+   - Leave `Score`, `PDF`, and `Report` empty.
+
+2. Return the string `SKIP:{rule-id}: "{quoted JD sentence}"` to the caller.
+
+3. Do NOT create a report. Do NOT drop a TSV in `data/tracker-additions/`.
+
+The quoted sentence is mandatory — it's the candidate's audit trail. Never
+say "SKIP: remote restricted" without the exact quoted evidence.
+
+## Rules of the road
+
+- **Never skip on ambiguity.** If a location field is `unspecified` and no rule has hard evidence, return ALLOW. Scoring will handle soft location concerns in Block C (Cultural Signals).
+- **One rule, one evidence.** Don't concatenate multiple rule failures. Report the first SKIP cleanly.
+- **Quote the JD exactly.** No paraphrasing. The dashboard shows this string verbatim in the SKIP filter.

@@ -1,0 +1,12 @@
+[project]
+name = "career-ops-cv"
+version = "0.1.0"
+description = "CV rendering via WeasyPrint (used by generate-cv-llm.mjs)"
+requires-python = ">=3.11"
+dependencies = [
+    "weasyprint>=62",
+    "markdown>=3.6",
+]
+
+[tool.uv]
+package = false

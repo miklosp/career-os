@@ -1,0 +1,39 @@
+# User-editable config (never committed)
+config/*
+!config/.gitkeep
+
+# Generated state (never committed)
+data/*
+!data/.gitkeep
+!data/tracker-additions/
+data/tracker-additions/**/*.tsv
+!data/tracker-additions/.gitkeep
+
+reports/*.md
+!reports/.gitkeep
+output/*
+!output/.gitkeep
+jds/*
+!jds/.gitkeep
+
+.update-dismissed
+.update-lock
+
+# Generated
+.resolved-prompt-*
+node_modules/
+bun.lock
+
+# OS
+.DS_Store
+*.mov
+*.mp4
+
+# Claude Code local
+.claude/settings.local.json
+.claude/memory/
+career-dashboard
+package-lock.json
+
+# Local env (never commit secrets)
+.env

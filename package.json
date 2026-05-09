@@ -1,0 +1,31 @@
+{
+  "name": "career-ops",
+  "version": "0.0.0-private",
+  "private": true,
+  "description": "Personal AI job search pipeline — diverged fork of santifer/career-ops",
+  "scripts": {
+    "doctor": "node doctor.mjs",
+    "verify": "node verify-pipeline.mjs",
+    "normalize": "node normalize-statuses.mjs",
+    "dedup": "node dedup-tracker.mjs",
+    "merge": "node merge-tracker.mjs",
+    "sync-check": "node cv-sync-check.mjs",
+    "liveness": "node check-liveness.mjs",
+    "scan": "node scan.mjs",
+    "cv-llm": "node generate-cv-llm.mjs",
+    "fact-check": "node cv-fact-check.mjs"
+  },
+  "keywords": [
+    "ai",
+    "job-search",
+    "claude-code",
+    "career",
+    "automation"
+  ],
+  "license": "UNLICENSED",
+  "dependencies": {
+    "better-sqlite3": "^12.9.0",
+    "js-yaml": "^4.1.1",
+    "playwright": "^1.58.1"
+  }
+}

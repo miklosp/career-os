@@ -1,0 +1,66 @@
+@font-face {
+  font-family: "Inter";
+  src: url("../fonts/Inter.ttf");
+  font-weight: normal;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: "Inter";
+  src: url("../fonts/Inter.ttf");
+  font-weight: 600;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: "Inter";
+  src: url("../fonts/Inter-Italic.ttf");
+  font-weight: normal;
+  font-style: italic;
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("../fonts/JetBrainsMono.ttf");
+  font-weight: normal;
+  font-style: normal;
+}
+
+@page {
+  margin: 2.5cm;
+}
+
+body {
+  font-family: "Inter", sans-serif;
+  font-size: 11pt;
+  line-height: 1.5;
+  color: #222222;
+}
+
+p {
+  margin: 0 0 0.9em 0;
+}
+
+hr {
+  border: none;
+  border-top: 1px solid #cccccc;
+  margin: 2em 0 0.5em 0;
+}
+
+a {
+  color: #222222;
+  text-decoration: underline;
+  text-decoration-color: #bbbbbb;
+  text-underline-offset: 2px;
+}
+
+.signature {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 9.5pt;
+  line-height: 1.55;
+  color: #444444;
+}
+
+.signature p {
+  margin: 0;
+}

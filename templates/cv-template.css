@@ -1,0 +1,158 @@
+/* --- Fonts --- */
+
+@font-face {
+  font-family: "Inter";
+  src: url("../fonts/Inter.ttf");
+  font-weight: normal;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: "Inter";
+  src: url("../fonts/Inter-Italic.ttf");
+  font-weight: normal;
+  font-style: italic;
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("../fonts/JetBrainsMono.ttf");
+  font-weight: normal;
+  font-style: normal;
+}
+
+/* --- Page ---
+   @page size is injected at render time by render-cv-pdf.py based on --format. */
+
+@page {
+  margin: 1.4cm 1.8cm;
+}
+
+/* --- Base --- */
+
+body {
+  font-family: "Inter", sans-serif;
+  font-size: 9.5pt;
+  line-height: 1.4;
+  color: #222222;
+}
+
+/* --- Headings --- */
+
+h1 {
+  font-family: "Avenir Next", sans-serif;
+  font-weight: 600;
+  font-size: 24pt;
+  color: #111111;
+  margin: 0 0 1pt 0;
+}
+
+/* Contact line */
+h1 + p {
+  font-size: 8.5pt;
+  color: #555555;
+  margin: 0 0 6pt 0;
+  letter-spacing: 0.1pt;
+}
+
+h2 {
+  font-family: "Inter", sans-serif;
+  font-size: 8.5pt;
+  font-weight: bold;
+  letter-spacing: 0.3pt;
+  color: #444444;
+  margin: 14pt 0 4pt 0;
+  border-bottom: 1.5pt solid #222222;
+  padding-bottom: 3pt;
+}
+
+h3 {
+  font-family: "Inter", sans-serif;
+  font-size: 10pt;
+  font-weight: bold;
+  color: #111111;
+  margin: 10pt 0 0 0;
+}
+
+/* --- Role metadata: date, location — monospace for dev feel --- */
+
+h3 + p,
+h3 + p + p,
+div.description + p + p,
+ul + p + p {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 8.5pt;
+  color: #666666;
+  margin: 0;
+}
+
+.description > p {
+  font-size: 9pt;
+  color: #666666;
+  margin: 0;
+}
+
+/* --- Sub-projects / sub-roles (bold paragraphs after bullet lists) --- */
+
+ul + p > strong:first-child,
+div.description + p > strong:first-child {
+  display: inline-block;
+  padding-top: 4pt;
+}
+
+/* --- Body text --- */
+
+p {
+  margin: 1.5pt 0;
+}
+
+/* --- Lists --- */
+
+ul, ol {
+  margin: 2pt 0;
+  padding-left: 14pt;
+  list-style: none;
+}
+
+li {
+  margin: 1pt 0;
+}
+
+li::before {
+  content: "•  ";
+}
+
+/* --- Links --- */
+
+a {
+  color: #555555;
+  text-decoration: none;
+}
+
+h1 + p a {
+  text-decoration: underline;
+  text-decoration-color: #bbbbbb;
+}
+
+/* --- Description blocks --- */
+
+.description {
+  page-break-before: avoid;
+  page-break-after: avoid;
+}
+
+/* --- Page break control --- */
+
+h2, h3 {
+  page-break-after: avoid;
+}
+
+h3 + p, h3 + ul, h3 + ol,
+h3 + p + p, h3 + p + p + div {
+  page-break-before: avoid;
+}
+
+p, li {
+  orphans: 3;
+  widows: 3;
+}
