@@ -8,14 +8,14 @@ This is a personal, diverged fork of the public [santifer/career-ops](https://gi
 
 ## Data Contract (CRITICAL)
 
-Two layers. Read `DATA_CONTRACT.md` for the full list.
+Two layers (see README "Layout" for the full table).
 
 **`config/` — user-edited inputs** (personalization goes HERE):
 - `config/cv.md`, `config/profile.yml`, `config/_profile.md`, `config/portals.yml`, `config/story-bank.md`
 
-**`data/`, `reports/`, `output/`, `jds/` — system-written state**:
-- `data/applications.md`, `data/scan-history.db`, `data/tracker-additions/`, `data/interview-prep/`
-- `reports/*`, `output/*`, `jds/*`
+**`data/` and `output/` — system-written state**:
+- `data/applications.md`, `data/scan-history.db`, `data/tracker-additions/`, `data/jds/`, `data/reports/`
+- `output/customized-cvs/`, `output/interview-prep/`
 
 Everything else (modes, scripts, dashboard, templates) is implementation and edited freely in this repo.
 
@@ -27,9 +27,9 @@ AI-powered job search automation built on Claude Code: unified JD ingestion, loc
 
 Every URL — whether the user paste it, multiple URLs on `/career-ops url1 url2 ...`, or newly discovered by `scan.mjs` — goes through the exact same path, as a **background agent**:
 
-1. **Fetch** (`modes/_fetch.md`) — save `jds/{NUM}-*.md`, reserve NUM via `lib/next-num.mjs`, insert `Fetched` row in `data/applications.md`.
+1. **Fetch** (`modes/_fetch.md`) — save `data/jds/{NUM}-*.md`, reserve NUM via `lib/next-num.mjs`, insert `Fetched` row in `data/applications.md`.
 2. **Location gate** (`modes/_location-gate.md`) — cheap check against `config/profile.yml` → `location_policy`. On SKIP: status flips to `Skipped-Location`, quoted JD evidence in Notes, stop.
-3. **Score** (`modes/_eval.md`) — Sonnet (`claude -p --model claude-sonnet-4-6`). Lean narrative report: A/B/C/D scored. No compensation block. Writes `reports/{NUM}-*.md` and drops a TSV in `data/tracker-additions/`.
+3. **Score** (`modes/_eval.md`) — Sonnet (`claude -p --model claude-sonnet-4-6`). Lean narrative report: A/B/C/D scored. No compensation block. Writes `data/reports/{NUM}-*.md` and drops a TSV in `data/tracker-additions/`.
 4. **CV personalization** — user-triggered only (dashboard `g` key). Opus via Bifrost. Never part of the auto pipeline.
 
 Multiple URLs = parallel agents (≤ 3 concurrent; keeps agent-browser / CDP sessions and target-site rate limits healthy).
@@ -41,8 +41,8 @@ Multiple URLs = parallel agents (≤ 3 concurrent; keeps agent-browser / CDP ses
 | `data/applications.md` | Single source of truth — from `Fetched` through `Applied`, `Interview`, `Offer`. |
 | `data/scan-history.db` | URL-level dedupe log (SQLite, table `offers`, PK `url`). Every URL ever seen lands here. Legacy `.tsv` kept as `.bak` after migration. |
 | `data/tracker-additions/` | Lock-free write-queue. Scoring agents drop one TSV per evaluated JD; `merge-tracker.mjs` folds them into applications.md. |
-| `jds/{NUM}-*.md` | Saved JD with populated location header fields. Reserved at fetch time. |
-| `reports/{NUM}-*.md` | Narrative evaluation. Blocks A–D scored. No compensation block. |
+| `data/jds/{NUM}-*.md` | Saved JD with populated location header fields. Reserved at fetch time. |
+| `data/reports/{NUM}-*.md` | Narrative evaluation. Blocks A–D scored. No compensation block. |
 | `lib/next-num.mjs` | Canonical sequential-number helper. |
 | `config/profile.yml` | Candidate identity, targets, and `location_policy` block. |
 | `modes/_fetch.md`, `modes/_location-gate.md`, `modes/_eval.md` | The three single-purpose stages. |
@@ -50,10 +50,9 @@ Multiple URLs = parallel agents (≤ 3 concurrent; keeps agent-browser / CDP ses
 | `config/_profile.md` | User customization (never auto-updated). |
 | `config/portals.yml` | Company and search configuration. |
 | `config/cv.md`, `config/story-bank.md` | Candidate proof-point sources (always read, never hardcoded). |
-| `templates/cv-template.css`, `generate-cv-llm.mjs`, `render-cv-pdf.py`, `pyproject.toml`, `config/ats-prompt.md`, `.env` | CV personalization stack — Opus via Bifrost + WeasyPrint. |
-| `cv-fact-check.mjs`, `config/cv-review-prompt.md` | Independent fact-checker for generated CVs — Gemini via Bifrost (`gemini-pro` alias). Interactive walkthrough flags fabrications missed by the generator, applies fixes in-place, re-renders the PDF on apply. Dashboard: pressing Enter on a row with `review-pending` status opens the walkthrough before the report. |
+| `style/cv-template.css`, `style/cover-letter.css`, `style/fonts/`, `lib/generate-cv-llm.mjs`, `render-cv-pdf.py`, `pyproject.toml`, `config/ats-prompt.md`, `.env` | CV personalization stack — Opus via Bifrost + WeasyPrint. |
+| `lib/cv-fact-check.mjs`, `config/cv-review-prompt.md` | Independent fact-checker for generated CVs — Gemini via Bifrost (`gemini-pro` alias). Interactive walkthrough flags fabrications missed by the generator, applies fixes in-place, re-renders the PDF on apply. Dashboard: pressing Enter on a row with `review-pending` status opens the walkthrough before the report. |
 | `scan.mjs` | Zero-token portal scanner — discovers URLs, inserts into `data/scan-history.db`, prints `DISPATCH_URLS=[...]` on stdout for Claude to dispatch fetch agents. Auto-migrates from legacy `scan-history.tsv` on first run. |
-| `check-liveness.mjs`, `liveness-core.mjs` | Liveness checks (expired signal detection). |
 
 ### OpenCode Commands
 
@@ -62,7 +61,6 @@ When using [OpenCode](https://opencode.ai), the following slash commands are ava
 | Command | Claude Code Equivalent | Description |
 |---------|------------------------|-------------|
 | `/career-ops` | `/career-ops` | Show menu or run the pipeline on one or more URLs |
-| `/career-ops-deep` | `/career-ops deep` | Deep company research |
 | `/career-ops-pdf` | `/career-ops pdf` | Generate ATS-optimized CV |
 | `/career-ops-tracker` | `/career-ops tracker` | Application status overview |
 | `/career-ops-apply` | `/career-ops apply` | Live application assistant |
@@ -162,7 +160,7 @@ This system is designed to be customized by YOU (AI Agent). When the user asks y
 - "Translate the modes to English" → edit all files in `modes/`
 - "Add these companies to my portals" → edit `config/portals.yml`
 - "Update my profile" → edit `config/profile.yml`
-- "Change the CV template design" → edit `templates/cv-template.css`
+- "Change the CV template design" → edit `style/cv-template.css`
 - "Adjust the scoring weights" → edit `config/_profile.md` for user-specific weighting, or `modes/_shared.md` + `modes/_eval.md` for shared system defaults
 
 ### Language Policy for Mode Files
@@ -174,7 +172,6 @@ All mode files in `modes/` must be in English. Reports and CVs still match the J
 | If the user... | Mode |
 |----------------|------|
 | Pastes one or more JDs / URLs | `auto-pipeline` — fan out one background agent per URL (fetch → gate → score) |
-| Asks for company research | `deep` |
 | Preps for interview at specific company | `interview-prep` |
 | Wants to generate CV/PDF | `pdf` (Opus 4.7 via Bifrost, triggered by dashboard `g`) |
 | Asks about application status | `tracker` |
@@ -212,12 +209,12 @@ done  (CV + PDF ready to send; Enter now opens the report as normal)
 **Precedence:** when a row has `review-pending` status, pressing Enter opens the review walkthrough BEFORE the report — forces the user through the fact-check before reading the scoring narrative. After the walkthrough exits, the report opens automatically.
 
 **Files:**
-- `generate-cv-llm.mjs` — Opus generator, uses `config/ats-prompt.md`. Writes `output/{NUM}-{slug}-cv.md` + `.pdf`.
-- `cv-fact-check.mjs` — two-phase reviewer:
+- `lib/generate-cv-llm.mjs` — Opus generator, uses `config/ats-prompt.md`. Writes `output/customized-cvs/{NUM}-{slug}-cv.md` + `.pdf`.
+- `lib/cv-fact-check.mjs` — two-phase reviewer:
   - `--review-only <cv>` → phase 1 only (Gemini call, saves review JSON, exits). Used by dashboard auto-chain.
   - `<cv>` (no flag) → phase 2 walkthrough. If review JSON exists, skips the LLM call. Deletes JSON at end of walkthrough.
 - `config/cv-review-prompt.md` — reviewer prompt (fact-checker role, explicit scan list for fabricated patterns).
-- `output/{NUM}-{slug}-cv-review.json` — persisted review findings; presence of this file is the "review-pending" signal.
+- `output/customized-cvs/{NUM}-{slug}-cv-review.json` — persisted review findings; presence of this file is the "review-pending" signal.
 
 **Dashboard keys on a row:**
 - `g` — generate CV and auto-chain review.
@@ -253,11 +250,11 @@ See `agent-browser skills get core` for full CLI patterns (snapshot refs, clicks
 
 ## Stack and Conventions
 
-- Node.js (mjs modules), `agent-browser` (scraping via Chromium CDP), Playwright (used only by `check-liveness.mjs`), WeasyPrint via `render-cv-pdf.py` (PDF), YAML (config), HTML/CSS (template), Markdown (data), Canva MCP (optional visual CV)
+- Node.js (mjs modules), `agent-browser` (scraping via Chromium CDP), Playwright (only as a doctor.mjs install-check probe), WeasyPrint via `render-cv-pdf.py` (PDF), YAML (config), HTML/CSS (template), Markdown (data), Canva MCP (optional visual CV)
 - Go (dashboard TUI)
 - Scripts in `.mjs`, configuration in YAML
-- Output in `output/` (gitignored), Reports in `reports/`
-- JDs in `jds/` — reserved at fetch time, NUM drives everything downstream (report filename, tracker report link, CV output)
+- Output in `output/` (gitignored), Reports in `data/reports/`
+- JDs in `data/jds/` — reserved at fetch time, NUM drives everything downstream (report filename, tracker report link, CV output)
 - Report / JD numbering: sequential 3-digit zero-padded via `lib/next-num.mjs` (single canonical helper, called from every site that assigns numbers)
 - **RULE: After any evaluation batch lands in `data/tracker-additions/`, run `node merge-tracker.mjs`** to fold TSVs into applications.md. Agents never call this themselves — only the user.
 - **RULE: NEVER append new entries to applications.md for company+role pairs that already exist.** `merge-tracker.mjs` promotes `Fetched` rows in place; new-entry creation happens only when there's no existing match.
@@ -267,7 +264,7 @@ See `agent-browser skills get core` for full CLI patterns (snapshot refs, clicks
 Write one TSV file per evaluation to `data/tracker-additions/{num}-{company-slug}.tsv`. Single line, 9 tab-separated columns:
 
 ```
-{num}\t{date}\t{company}\t{role}\t{status}\t{score}/5\t{pdf_emoji}\t[{num}](reports/{num}-{slug}-{date}.md)\t{note}
+{num}\t{date}\t{company}\t{role}\t{status}\t{score}/5\t{pdf_emoji}\t[{num}](data/reports/{num}-{slug}-{date}.md)\t{note}
 ```
 
 **Column order (IMPORTANT -- status BEFORE score):**
@@ -278,7 +275,7 @@ Write one TSV file per evaluation to `data/tracker-additions/{num}-{company-slug
 5. `status` -- canonical status (e.g., `Evaluated`)
 6. `score` -- format `X.X/5` (e.g., `4.2/5`)
 7. `pdf` -- `✅` or `❌`
-8. `report` -- markdown link `[num](reports/...)`
+8. `report` -- markdown link `[num](data/reports/...)`
 9. `notes` -- one-line summary
 
 **Note:** In applications.md, score comes BEFORE status. The merge script handles this column swap automatically.
@@ -290,9 +287,9 @@ Write one TSV file per evaluation to `data/tracker-additions/{num}-{company-slug
 3. **YES you can edit applications.md to UPDATE status/notes of existing entries** (e.g. flipping `Evaluated` → `Applied` after submission).
 4. All reports MUST include `**URL:**` in the header (between `**ID:**` and `**Summary:**`). Do NOT add a `**PDF:**` line to report headers — PDF status lives only in applications.md and goes stale if duplicated.
 5. All statuses MUST be canonical (see `templates/states.yml`).
-6. Health check: `node verify-pipeline.mjs`
-7. Normalize statuses: `node normalize-statuses.mjs`
-8. Dedup: `node dedup-tracker.mjs`
+6. Health check: `node lib/verify-pipeline.mjs` (or `pnpm run verify`)
+7. Normalize statuses: `node lib/normalize-statuses.mjs` (or `pnpm run normalize`)
+8. Dedup: `node lib/dedup-tracker.mjs` (or `pnpm run dedup`)
 
 ### Canonical States (applications.md)
 
@@ -300,7 +297,7 @@ Write one TSV file per evaluation to `data/tracker-additions/{num}-{company-slug
 
 | State | When to use |
 |-------|-------------|
-| `Fetched` | JD saved under `jds/`, awaiting location gate + scoring. Score + Report empty. |
+| `Fetched` | JD saved under `data/jds/`, awaiting location gate + scoring. Score + Report empty. |
 | `Skipped-Location` | Location gate said skip. Notes column holds `<rule-id>: "<quoted evidence>"`. No report. |
 | `Evaluated` | Report completed, pending decision. |
 | `Applied` | Application sent. |

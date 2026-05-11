@@ -8,13 +8,15 @@ data/*
 !data/tracker-additions/
 data/tracker-additions/**/*.tsv
 !data/tracker-additions/.gitkeep
+!data/jds/
+data/jds/*
+!data/jds/.gitkeep
+!data/reports/
+data/reports/*
+!data/reports/.gitkeep
 
-reports/*.md
-!reports/.gitkeep
 output/*
 !output/.gitkeep
-jds/*
-!jds/.gitkeep
 
 .update-dismissed
 .update-lock

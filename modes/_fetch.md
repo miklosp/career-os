@@ -1,7 +1,7 @@
 # Mode: _fetch — Get the JD, save it, reserve a number
 
 Single source of truth for turning a job URL (or pasted JD text) into a
-numbered file under `jds/`. Called by `modes/auto-pipeline.md` and by
+numbered file under `data/jds/`. Called by `modes/auto-pipeline.md` and by
 `scan.mjs`. Never run this in the foreground — always dispatch as a
 background agent.
 
@@ -20,16 +20,16 @@ If the input is a URL:
 
    ```bash
    url_path=$(printf '%s' "{url}" | awk -F'?' '{print $1}' | sed 's|/application/*$||;s|/$||')
-   match=$(grep -rlF "**URL:** ${url_path}" jds/ 2>/dev/null | head -1)
+   match=$(grep -rlF "**URL:** ${url_path}" data/jds/ 2>/dev/null | head -1)
    ```
 
    If `$match` is non-empty, the JD already exists. The next decision depends on its evaluation status — read the row in `data/applications.md` whose `#` column equals the leading 3-digit NUM of `$match`:
 
    - **Status `Evaluated` / `Applied` / `Responded` / `Interview` / `Offer` / `Rejected` / `Discarded` / `Skipped-Location` / `SKIP`** → stop silently. Already handled.
-   - **Status `Fetched`** → the JD was prefetched (typically by `lib/linkedin-scan.mjs` during `scan.mjs`). The fetch work is already done; **skip Steps 2–5 and proceed to Step 6 (Hand off)** so the orchestrator runs `_location-gate.md` then `_eval.md` against the existing JD. Do NOT re-fetch — that would burn Apify/Firecrawl credits for content already on disk.
+   - **Status `Fetched`** → the JD was prefetched (typically by `lib/scan-linkedin.mjs` during `scan.mjs`). The fetch work is already done; **skip Steps 2–5 and proceed to Step 6 (Hand off)** so the orchestrator runs `_location-gate.md` then `_eval.md` against the existing JD. Do NOT re-fetch — that would burn Apify/Firecrawl credits for content already on disk.
    - **No matching row in `applications.md`** → the JD file is orphaned (race or manual edit). Treat as if dedup didn't hit and continue with Steps 2–5 to populate the row, but reuse the existing NUM and JD path instead of reserving a new one.
 
-   **`data/applications.md` is NOT a URL dedup source — it has no URL column. The `**URL:**` line in each `jds/*.md` file is the canonical URL store.** The status column in `applications.md` is what differentiates "already fetched, awaiting evaluation" from "fully handled."
+   **`data/applications.md` is NOT a URL dedup source — it has no URL column. The `**URL:**` line in each `data/jds/*.md` file is the canonical URL store.** The status column in `applications.md` is what differentiates "already fetched, awaiting evaluation" from "fully handled."
 
    Whenever you write the `**URL:**` header in Step 4, write the **stripped** form (no query string, no trailing slash, no `/application` suffix) so future dedup grep always matches.
 
@@ -45,13 +45,13 @@ Call `lib/next-num.mjs` to atomically reserve the next 3-digit number:
 node lib/next-num.mjs
 ```
 
-Store the returned value as `NUM`. The helper scans `jds/`, `reports/`,
+Store the returned value as `NUM`. The helper scans `data/jds/`, `data/reports/`,
 `data/applications.md`, and `data/tracker-additions/`, computes `max + 1`,
-and **atomically creates** `jds/{NUM}.reserved` via `O_EXCL`. Parallel
+and **atomically creates** `data/jds/{NUM}.reserved` via `O_EXCL`. Parallel
 agents that race on the same NUM will lose the exclusive create and
 automatically retry with the next value — no manual retry needed.
 
-**After writing** `jds/{NUM}-{slug}.md` in Step 4, release the reservation
+**After writing** `data/jds/{NUM}-{slug}.md` in Step 4, release the reservation
 marker:
 
 ```bash
@@ -198,7 +198,7 @@ Use CDP specifically for:
 
 ## Step 4 — Save the JD
 
-Write to `jds/{NUM}-{company-slug}-{role-slug}.md`.
+Write to `data/jds/{NUM}-{company-slug}-{role-slug}.md`.
 
 `{company-slug}` and `{role-slug}` = lowercase with spaces / punctuation → hyphens, ASCII only.
 
@@ -255,11 +255,11 @@ Append one row to `data/applications.md` with status `Fetched`:
 
 (Score and Report columns stay empty — they fill in after the location gate
 and scoring.) The next stage reads this row's NUM to keep numbering
-consistent across `jds/`, `applications.md`, and `reports/`.
+consistent across `data/jds/`, `applications.md`, and `data/reports/`.
 
 ## Step 6 — Hand off
 
-Return the `NUM` and `jds/{NUM}-...md` path to the caller. The orchestrator
+Return the `NUM` and `data/jds/{NUM}-...md` path to the caller. The orchestrator
 (`modes/auto-pipeline.md`) will invoke `modes/_location-gate.md` next.
 
 ## Failure handling

@@ -3,7 +3,7 @@ name: career-ops
 description: AI job search command center -- evaluate offers, generate CVs, scan portals, track applications
 user_invocable: true
 args: mode
-argument-hint: "[scan | deep | pdf | apply | tracker | interview-prep | update]"
+argument-hint: "[scan | pdf | apply | tracker | interview-prep | update]"
 ---
 
 # career-ops -- Router
@@ -16,7 +16,6 @@ Determine the mode from `{{mode}}`:
 |-------|------|
 | (empty / no args) | `discovery` -- Show command menu |
 | One or more URLs / JD text (no sub-command) | **`auto-pipeline`** — fan out one background agent per URL |
-| `deep` | `deep` |
 | `pdf` | `pdf` |
 | `tracker` | `tracker` |
 | `apply` | `apply` |
@@ -47,7 +46,6 @@ Main flow:
 
 Utilities:
   /career-ops scan      → discover new offers across portals (prints URLs to dispatch)
-  /career-ops deep      → deep company research
   /career-ops pdf       → generate ATS-optimized CV + PDF (Opus 4.7 via Bifrost)
   /career-ops tracker   → application status overview
   /career-ops apply     → live application assistant (reads form + drafts answers)
@@ -84,7 +82,7 @@ Applies to: `pdf`, `apply`, `scan`.
 
 Read `modes/{mode}.md`.
 
-Applies to: `tracker`, `deep`, `interview-prep`.
+Applies to: `tracker`, `interview-prep`.
 
 ### Delegating to subagents
 

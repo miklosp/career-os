@@ -1,13 +1,13 @@
 # Mode: _location-gate — Skip roles that don't fit the user's geography
 
-Runs after `modes/_fetch.md` has saved a JD under `jds/{NUM}-*.md` and before
+Runs after `modes/_fetch.md` has saved a JD under `data/jds/{NUM}-*.md` and before
 `modes/_eval.md` spends tokens scoring it. Cheap, deterministic, honest —
 when a role can't work geographically, skip it with the evidence quoted.
 
 ## Input
 
 - `NUM` from the fetch stage
-- `jds/{NUM}-*.md` (the saved JD with its populated location header fields)
+- `data/jds/{NUM}-*.md` (the saved JD with its populated location header fields)
 
 ## Step 1 — Load policy
 
@@ -30,7 +30,7 @@ If present, pull these fields (with defaults in case of partial config):
 
 ## Step 2 — Read the JD header
 
-From `jds/{NUM}-*.md` take the five location header fields:
+From `data/jds/{NUM}-*.md` take the five location header fields:
 
 - `**Location:**`
 - `**Remote scope:**`

@@ -38,7 +38,7 @@ func hasPendingReview(careerOpsPath string, app model.CareerApplication) bool {
 		return false
 	}
 	// Find JD file to derive slug.
-	jdsDir := filepath.Join(careerOpsPath, "jds")
+	jdsDir := filepath.Join(careerOpsPath, "data", "jds")
 	entries, err := os.ReadDir(jdsDir)
 	if err != nil {
 		return false
@@ -55,7 +55,7 @@ func hasPendingReview(careerOpsPath string, app model.CareerApplication) bool {
 	if slug == "" {
 		return false
 	}
-	reviewPath := filepath.Join(careerOpsPath, "output", fmt.Sprintf("%s-%s-cv-review.json", num, slug))
+	reviewPath := filepath.Join(careerOpsPath, "output", "customized-cvs", fmt.Sprintf("%s-%s-cv-review.json", num, slug))
 	_, err = os.Stat(reviewPath)
 	return err == nil
 }

@@ -12,25 +12,25 @@ Requires `BIFROST_URL` and `BIFROST_MODEL` in `.env` (or environment). Defaults:
 
 From the dashboard, press **`g`** on a selected row to trigger the same pipeline for that application.
 
-**Precondition:** the JD must already be saved at `jds/{NUM}-{slug}.md`. If it isn't, run `/career-ops pipeline` or paste the URL/JD first — the evaluation step saves the JD.
+**Precondition:** the JD must already be saved at `data/jds/{NUM}-{slug}.md`. If it isn't, run `/career-ops pipeline` or paste the URL/JD first — the evaluation step saves the JD.
 
 ---
 
 ## Pipeline
 
-1. Locate the JD file for the target application at `jds/{NUM}-{slug}.md`.
+1. Locate the JD file for the target application at `data/jds/{NUM}-{slug}.md`.
 2. Detect paper format: US/Canada → `letter`, everywhere else → `a4`.
 3. Run the script:
 
 ```bash
-node generate-cv-llm.mjs --jd jds/{NUM}-{slug}.md --format {a4|letter}
+node lib/generate-cv-llm.mjs --jd data/jds/{NUM}-{slug}.md --format {a4|letter}
 ```
 
 The script derives `NUM` and `slug` from the JD filename. Pass `--num` and `--slug` explicitly only if `--jd` is inline text rather than a file.
 
 4. The script produces:
-   - `output/{NUM}-{slug}-cv.md`
-   - `output/{NUM}-{slug}-cv.pdf`
+   - `output/customized-cvs/{NUM}-{slug}-cv.md`
+   - `output/customized-cvs/{NUM}-{slug}-cv.pdf`
 
 5. Report to the user:
    - PDF path
@@ -40,7 +40,7 @@ The script derives `NUM` and `slug` from the JD filename. Pass `--num` and `--sl
 ## Error handling
 
 - **Bifrost 404/500**: proxy is not running. Ask the user to start it.
-- **PDF generation failed**: WeasyPrint / uv issue, independent of the LLM step. The markdown is already saved; user can run `uv run render-cv-pdf.py --in output/{NUM}-{slug}-cv.md --out output/{NUM}-{slug}-cv.pdf --css templates/cv-template.css --format a4` manually.
+- **PDF generation failed**: WeasyPrint / uv issue, independent of the LLM step. The markdown is already saved; user can run `uv run render-cv-pdf.py --in output/customized-cvs/{NUM}-{slug}-cv.md --out output/customized-cvs/{NUM}-{slug}-cv.pdf --css style/cv-template.css --format a4` manually.
 - **Empty sections**: certifications and projects are optional — the LLM simply omits the section headers when irrelevant; markdown naturally renders without them.
 
 ## Updating tracker

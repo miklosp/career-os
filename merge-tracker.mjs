@@ -335,7 +335,7 @@ if (DRY_RUN) console.log('(dry-run — no changes written)');
 if (VERIFY && !DRY_RUN) {
   console.log('\n--- Running verification ---');
   try {
-    execFileSync('node', [join(CAREER_OPS, 'verify-pipeline.mjs')], { stdio: 'inherit' });
+    execFileSync('node', [join(CAREER_OPS, 'lib/verify-pipeline.mjs')], { stdio: 'inherit' });
   } catch (e) {
     process.exit(1);
   }

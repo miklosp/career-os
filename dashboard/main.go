@@ -197,17 +197,17 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		// Derive the CV output path so the auto-chained review phase knows
-		// where to find the markdown. Matches generate-cv-llm.mjs convention:
-		// output/{NUM}-{slug}-cv.md where slug comes from the JD filename.
+		// where to find the markdown. Matches lib/generate-cv-llm.mjs convention:
+		// output/customized-cvs/{NUM}-{slug}-cv.md where slug comes from the JD filename.
 		jdBase := strings.TrimSuffix(filepath.Base(jdFile), ".md")
-		cvPath := filepath.Join(msg.CareerOpsPath, "output", jdBase+"-cv.md")
+		cvPath := filepath.Join(msg.CareerOpsPath, "output", "customized-cvs", jdBase+"-cv.md")
 		careerOpsPath := msg.CareerOpsPath
 		startedCmd := func() tea.Msg { return screens.CVGenStartedMsg{AppKey: key} }
 		bgCmd := func() tea.Msg {
 			// Script derives NUM and slug from the JD filename. PDF is
 			// deferred to the finalize step (after the user walks the review),
 			// so generate markdown only here.
-			cmd := exec.Command("node", "generate-cv-llm.mjs",
+			cmd := exec.Command("node", "lib/generate-cv-llm.mjs",
 				"--jd", jdFile, "--format", "a4", "--no-pdf")
 			cmd.Dir = careerOpsPath
 			err := cmd.Run()
@@ -235,7 +235,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return screens.ReviewStartedMsg{AppKey: appKey}
 		}
 		reviewCmd := func() tea.Msg {
-			cmd := exec.Command("node", "cv-fact-check.mjs",
+			cmd := exec.Command("node", "lib/cv-fact-check.mjs",
 				"--review-only", cvPath)
 			cmd.Dir = careerOpsPath
 			err := cmd.Run()
@@ -261,13 +261,13 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if num == "" {
 			return m, pcmd
 		}
-		reviewJSON := filepath.Join(m.careerOpsPath, "output", jdBase+"-cv-review.json")
+		reviewJSON := filepath.Join(m.careerOpsPath, "output", "customized-cvs", jdBase+"-cv-review.json")
 		if _, err := os.Stat(reviewJSON); err == nil {
 			// Findings exist — wait for the user to walk through.
 			return m, pcmd
 		}
 		// No findings — auto-render PDF.
-		cvPath := filepath.Join(m.careerOpsPath, "output", jdBase+"-cv.md")
+		cvPath := filepath.Join(m.careerOpsPath, "output", "customized-cvs", jdBase+"-cv.md")
 		app, _ := m.pipeline.AppByKey(msg.AppKey)
 		appKey := msg.AppKey
 		careerOpsPath := m.careerOpsPath
@@ -292,8 +292,8 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		jdBase := strings.TrimSuffix(filepath.Base(jdFile), ".md")
-		cvPath := filepath.Join(msg.CareerOpsPath, "output", jdBase+"-cv.md")
-		reviewJSONPath := filepath.Join(msg.CareerOpsPath, "output", jdBase+"-cv-review.json")
+		cvPath := filepath.Join(msg.CareerOpsPath, "output", "customized-cvs", jdBase+"-cv.md")
+		reviewJSONPath := filepath.Join(msg.CareerOpsPath, "output", "customized-cvs", jdBase+"-cv-review.json")
 		if _, err := os.Stat(cvPath); err != nil {
 			// No generated CV on disk yet — user must press `g` first.
 			return m, nil
@@ -347,7 +347,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		openAfter := msg.OpenReportAfter
 		renderCmd := func() tea.Msg {
 			pdfPath := strings.TrimSuffix(cvPath, ".md") + ".pdf"
-			cssPath := filepath.Join(careerOpsPath, "templates/cv-template.css")
+			cssPath := filepath.Join(careerOpsPath, "style/cv-template.css")
 			cmd := exec.Command("uv", "run", "--project", careerOpsPath,
 				filepath.Join(careerOpsPath, "render-cv-pdf.py"),
 				"--in", cvPath,
@@ -398,7 +398,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		careerOpsPath := msg.CareerOpsPath
 		return m, func() tea.Msg {
-			prompt := "Re-run modes/_location-gate.md then modes/_eval.md on " + jdFile + ". Write the report to reports/ and drop a TSV in data/tracker-additions/."
+			prompt := "Re-run modes/_location-gate.md then modes/_eval.md on " + jdFile + ". Write the report to data/reports/ and drop a TSV in data/tracker-additions/."
 			cmd := exec.Command("claude", "-p",
 				"--model", "claude-sonnet-4-6",
 				"--dangerously-skip-permissions", prompt)
@@ -499,7 +499,7 @@ func (m appModel) View() string {
 }
 
 // reportNum extracts the 3-digit prefix from a report path like
-// "reports/064-legora-product-lead-core-growth-2026-04-17.md".
+// "data/reports/064-legora-product-lead-core-growth-2026-04-17.md".
 func reportNum(reportPath string) string {
 	name := filepath.Base(reportPath)
 	if len(name) < 3 {
@@ -514,9 +514,9 @@ func reportNum(reportPath string) string {
 	return prefix
 }
 
-// findJDFileByNum returns the jds/{NUM}-*.md file matching the given number.
+// findJDFileByNum returns the data/jds/{NUM}-*.md file matching the given number.
 func findJDFileByNum(careerOpsPath, num string) string {
-	jdsDir := filepath.Join(careerOpsPath, "jds")
+	jdsDir := filepath.Join(careerOpsPath, "data", "jds")
 	entries, err := os.ReadDir(jdsDir)
 	if err != nil {
 		return ""

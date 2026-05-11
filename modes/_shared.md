@@ -102,7 +102,6 @@ After detecting archetype, read `config/_profile.md` for the user's specific fra
 
 0. **Cover letter:** If the form allows it, ALWAYS include one. Same visual design as CV. JD quotes mapped to proof points. 1 page max.
 1. Read config/cv.md and config/_profile.md before evaluating
-1b. **First evaluation of each session:** Run `node cv-sync-check.mjs`. If warnings, notify user.
 2. Detect the role archetype and adapt framing per _profile.md
 3. Cite exact lines from CV when matching
 4. Use WebSearch for comp and company data
@@ -116,7 +115,7 @@ After detecting archetype, read `config/_profile.md` for the user's specific fra
 
 ### Tools
 
-**JD fetching:** see `modes/_fetch.md` — single source for priority order, ATS API patterns, Chromium CDP usage, LinkedIn rules, and the `jds/{NUM}-*.md` output schema. Every ingestion path (manual paste, multi-URL command, scanner) goes through it.
+**JD fetching:** see `modes/_fetch.md` — single source for priority order, ATS API patterns, Chromium CDP usage, LinkedIn rules, and the `data/jds/{NUM}-*.md` output schema. Every ingestion path (manual paste, multi-URL command, scanner) goes through it.
 
 **Location gate:** see `modes/_location-gate.md` — reads `config/profile.yml` → `location_policy` and either lets scoring proceed or writes `Skipped-Location` with the quoted JD sentence as evidence.
 
@@ -124,11 +123,11 @@ After detecting archetype, read `config/_profile.md` for the user's specific fra
 
 | Tool | Use |
 |------|-----|
-| Read | config/cv.md, config/_profile.md, templates/cv-template.css, jds/{NUM}-*.md |
+| Read | config/cv.md, config/_profile.md, style/cv-template.css, data/jds/{NUM}-*.md |
 | Write | reports .md, data/tracker-additions/*.tsv, applications.md rows |
 | Edit | Update applications.md status/notes |
 | Canva MCP | Optional visual CV generation. Duplicate base design, edit text, export PDF. Requires `canva_resume_design_id` in profile.yml. |
-| Bash | `node lib/next-num.mjs`, `node generate-cv-llm.mjs`, `uv run render-cv-pdf.py`, `node merge-tracker.mjs`, `xh` |
+| Bash | `node lib/next-num.mjs`, `node lib/generate-cv-llm.mjs`, `uv run render-cv-pdf.py`, `node merge-tracker.mjs`, `xh` |
 
 ### Time-to-offer priority
 - Working demo + metrics > perfection
@@ -151,7 +150,7 @@ These rules apply to ALL generated text that ends up in candidate-facing documen
 - "demonstrated ability to" / "best practices" (name the practice)
 
 ### Unicode normalization for ATS
-`generate-cv-llm.mjs` automatically normalizes em-dashes, smart quotes, and zero-width characters to ASCII equivalents in the generated markdown before WeasyPrint renders it. But avoid generating them in the first place.
+`lib/generate-cv-llm.mjs` automatically normalizes em-dashes, smart quotes, and zero-width characters to ASCII equivalents in the generated markdown before WeasyPrint renders it. But avoid generating them in the first place.
 
 ### Vary sentence structure
 - Don't start every bullet with the same verb

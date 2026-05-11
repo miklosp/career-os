@@ -1,12 +1,12 @@
 # Mode: _eval — Lean evaluation (A/B/C/D scored, F Posting Legitimacy)
 
 Called after `modes/_location-gate.md` returns ALLOW. Reads
-`jds/{NUM}-*.md` plus `config/cv.md` and `config/_profile.md`. Writes
-`reports/{NUM}-{company-slug}-{YYYY-MM-DD}.md` and a TSV row to
+`data/jds/{NUM}-*.md` plus `config/cv.md` and `config/_profile.md`. Writes
+`data/reports/{NUM}-{company-slug}-{YYYY-MM-DD}.md` and a TSV row to
 `data/tracker-additions/{NUM}-{company-slug}.tsv`.
 
 Narrative style only. No attribute tables, no JD→CV mapping tables, no
-STAR multi-column tables. Prose bullets. See `reports/013-zyte-2026-04-16.md`
+STAR multi-column tables. Prose bullets. See `data/reports/013-zyte-2026-04-16.md`
 for the target look and feel.
 
 ## Step 0 — Archetype detection
@@ -16,7 +16,7 @@ Detection). This controls framing in Block B and proof-point selection.
 
 ## Report shape
 
-Save to `reports/{NUM}-{company-slug}-{YYYY-MM-DD}.md` using exactly this
+Save to `data/reports/{NUM}-{company-slug}-{YYYY-MM-DD}.md` using exactly this
 header. The dashboard parser (`dashboard/internal/data/career.go`) reads
 `**URL:**`, `**Summary:**`, and `**Location:**` — keep those labels verbatim.
 `**ID:**` is human-facing; `**Score:**` is picked up from the applications.md
@@ -112,7 +112,7 @@ Write one TSV line to `data/tracker-additions/{NUM}-{company-slug}.tsv`.
 Single line, 9 tab-separated columns — order matters (status BEFORE score):
 
 ```
-{NUM}\t{YYYY-MM-DD}\t{Company}\t{Role}\tEvaluated\t{X.X}/5\t❌\t[{NUM}](reports/{NUM}-{slug}-{YYYY-MM-DD}.md)\t{one-line summary}
+{NUM}\t{YYYY-MM-DD}\t{Company}\t{Role}\tEvaluated\t{X.X}/5\t❌\t[{NUM}](data/reports/{NUM}-{slug}-{YYYY-MM-DD}.md)\t{one-line summary}
 ```
 
 `merge-tracker.mjs` will pick this up and update `data/applications.md` —

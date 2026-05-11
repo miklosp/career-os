@@ -5,7 +5,7 @@ When the user asks to prep for an interview at a specific company+role, or when 
 ## Inputs
 
 1. **Company name** and **role title** (required)
-2. **Evaluation report** in `reports/` (if exists) — read for archetype, gaps, matched proof points
+2. **Evaluation report** in `data/reports/` (if exists) — read for archetype, gaps, matched proof points
 3. **Story bank** at `config/story-bank.md` — read for existing prepared stories
 4. **CV** at `config/cv.md` — read for proof points
 5. **Profile** at `config/profile.yml` + `config/_profile.md` — read for candidate context
@@ -114,7 +114,7 @@ Things to say, do, and avoid based on research:
 
 ## Output
 
-Save the full report to `data/interview-prep/{company-slug}-{role-slug}.md` with this header:
+Save the full report to `output/interview-prep/{company-slug}-{role-slug}.md` with this header:
 
 ```markdown
 # Interview Intel: {Company} — {Role}
@@ -130,7 +130,6 @@ After delivering the report:
 
 1. Ask the user if they want to draft stories for any gaps found in Step 5
 2. If they have a scheduled interview date, note it: "Your interview is in {X} days. Want me to set a reminder to review this prep?"
-3. Suggest running `deep` mode if the company research in Step 1 was thin — deep mode covers strategy, culture, and competitive landscape in more depth
 
 ## Rules
 

@@ -26,8 +26,8 @@ import { readFileSync, writeFileSync, appendFileSync, existsSync, mkdirSync, ren
 import { resolve } from 'path';
 import yaml from 'js-yaml';
 import Database from 'better-sqlite3';
-import { runLinkedInScan } from './lib/linkedin-scan.mjs';
-import { runRemoteInEuropeScan } from './lib/remoteineurope-scan.mjs';
+import { runLinkedInScan } from './lib/scan-linkedin.mjs';
+import { runRemoteInEuropeScan } from './lib/scan-remoteineurope.mjs';
 const parseYaml = yaml.load;
 
 // Auto-load .env so APIFY_API_TOKEN / FIRECRAWL_API_KEY are available
@@ -367,12 +367,12 @@ async function main() {
   }
 
   // 5b. LinkedIn — Apify-based discovery + per-JD detail prefetch.
-  // Pure HTTP, zero LLM tokens. Pre-writes jds/ + applications.md row so
+  // Pure HTTP, zero LLM tokens. Pre-writes data/jds/ + applications.md row so
   // dispatched auto-pipeline agents skip _fetch.md and run gate+score only.
   let linkedinUrls = [];
   let linkedinStats = null;
   if (config.linkedin_searches?.length && process.env.APIFY_API_TOKEN) {
-    const jdsDir = resolve('jds');
+    const jdsDir = resolve('data/jds');
     mkdirSync(jdsDir, { recursive: true });
     try {
       const result = await runLinkedInScan({

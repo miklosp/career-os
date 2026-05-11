@@ -25,7 +25,7 @@ waiting for any of them.
 
 ### Per-agent flow
 
-1. **Fetch** — follow `modes/_fetch.md`. Outputs `NUM` + `jds/{NUM}-*.md`
+1. **Fetch** — follow `modes/_fetch.md`. Outputs `NUM` + `data/jds/{NUM}-*.md`
    + a new row in `data/applications.md` with status `Fetched`.
 
 2. **Location gate** — follow `modes/_location-gate.md`. If it returns
@@ -39,7 +39,7 @@ waiting for any of them.
    claude -p --model claude-sonnet-4-6 --dangerously-skip-permissions <prompt>
    ```
 
-   Writes `reports/{NUM}-{slug}-{date}.md` and drops a TSV in
+   Writes `data/reports/{NUM}-{slug}-{date}.md` and drops a TSV in
    `data/tracker-additions/`.
 
 4. **Do NOT run `merge-tracker.mjs`.** The user runs it when they're ready
@@ -62,7 +62,7 @@ company+role, and archives the consumed TSVs.
 ## CV generation — still Opus, still user-triggered
 
 PDF / CV customisation is **never** part of this pipeline. The user invokes
-it from the dashboard `g` key, which runs `generate-cv-llm.mjs` against the
+it from the dashboard `g` key, which runs `lib/generate-cv-llm.mjs` against the
 chosen JD. That path uses Opus 4.7 via Bifrost (`BIFROST_MODEL=claude-opus-4-7`).
 
 ## Tone for form answers (only when E ≥ 4.5, inside `_eval.md` Block H)

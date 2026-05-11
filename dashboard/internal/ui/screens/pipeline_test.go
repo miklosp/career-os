@@ -15,14 +15,14 @@ func TestWithReloadedDataPreservesStateAndSelection(t *testing.T) {
 			Role:       "Backend Engineer",
 			Status:     "Evaluated",
 			Score:      4.2,
-			ReportPath: "reports/001-acme.md",
+			ReportPath: "data/reports/001-acme.md",
 		},
 		{
 			Company:    "Beta",
 			Role:       "Platform Engineer",
 			Status:     "Evaluated",
 			Score:      4.6,
-			ReportPath: "reports/002-beta.md",
+			ReportPath: "data/reports/002-beta.md",
 		},
 	}
 
@@ -39,7 +39,7 @@ func TestWithReloadedDataPreservesStateAndSelection(t *testing.T) {
 	pm.viewMode = "flat"
 	pm.applyFilterAndSort()
 	pm.cursor = 1
-	pm.reportCache["reports/002-beta.md"] = reportSummary{summary: "cached"}
+	pm.reportCache["data/reports/002-beta.md"] = reportSummary{summary: "cached"}
 
 	refreshedApps := []model.CareerApplication{
 		initialApps[0],
@@ -49,7 +49,7 @@ func TestWithReloadedDataPreservesStateAndSelection(t *testing.T) {
 			Role:       "AI Engineer",
 			Status:     "Evaluated",
 			Score:      4.8,
-			ReportPath: "reports/003-gamma.md",
+			ReportPath: "data/reports/003-gamma.md",
 		},
 	}
 
@@ -64,10 +64,10 @@ func TestWithReloadedDataPreservesStateAndSelection(t *testing.T) {
 	if got := len(reloaded.filtered); got != 3 {
 		t.Fatalf("expected 3 filtered apps after refresh, got %d", got)
 	}
-	if app, ok := reloaded.CurrentApp(); !ok || app.ReportPath != "reports/002-beta.md" {
+	if app, ok := reloaded.CurrentApp(); !ok || app.ReportPath != "data/reports/002-beta.md" {
 		t.Fatalf("expected selection to stay on beta app, got %+v (ok=%v)", app, ok)
 	}
-	if reloaded.reportCache["reports/002-beta.md"].summary != "cached" {
+	if reloaded.reportCache["data/reports/002-beta.md"].summary != "cached" {
 		t.Fatal("expected cached report summaries to survive refresh")
 	}
 }

@@ -9,8 +9,8 @@ The mode runs entirely as zero-LLM-token shell + Node helpers. Browser-based dis
 | Level | Source | Implementation |
 |-------|--------|----------------|
 | 1 | **ATS APIs** for `tracked_companies` with an `api:` definition | `scan.mjs` (existing, zero-token) |
-| 2 | **LinkedIn** via Apify `valig~linkedin-jobs-scraper` + per-JD `apimaestro~linkedin-job-detail` | `lib/linkedin-scan.mjs` (zero-token; called from `scan.mjs`) |
-| 2b | **remoteineurope.com** sitemap + per-page scrape; aggregator that links straight to employer ATS via clean apply-button | `lib/remoteineurope-scan.mjs` (zero-token; free; called from `scan.mjs`) |
+| 2 | **LinkedIn** via Apify `valig~linkedin-jobs-scraper` + per-JD `apimaestro~linkedin-job-detail` | `lib/scan-linkedin.mjs` (zero-token; called from `scan.mjs`) |
+| 2b | **remoteineurope.com** sitemap + per-page scrape; aggregator that links straight to employer ATS via clean apply-button | `lib/scan-remoteineurope.mjs` (zero-token; free; called from `scan.mjs`) |
 | 3 | **WebSearch queries** for `search_queries` with `site:` filters (broad discovery, agent-executed because WebSearch needs an LLM tool call) | `modes/scan.md` agent path |
 
 The historical "Level 3 — agent-browser via Chromium CDP" sub-flow is gone. CDP for LinkedIn search was the source of session-contamination bugs and is replaced by the Apify path. CDP for non-LinkedIn careers pages is replaced by Firecrawl in the per-JD `_fetch.md` ladder. The persistent Chromium on `:9222` now exists solely for `apply` mode.
@@ -44,7 +44,7 @@ Agent(
 )
 ```
 
-The agent's job is mostly orchestration: invoke `scan.mjs`, read its `DISPATCH_URLS` line, and (if `search_queries` are enabled) run the Level 3 WebSearch pass. The heavy lifting is in `scan.mjs` and `lib/linkedin-scan.mjs`.
+The agent's job is mostly orchestration: invoke `scan.mjs`, read its `DISPATCH_URLS` line, and (if `search_queries` are enabled) run the Level 3 WebSearch pass. The heavy lifting is in `scan.mjs` and `lib/scan-linkedin.mjs`.
 
 ## Workflow
 
@@ -58,9 +58,9 @@ node scan.mjs
 2. **Open `data/scan-history.db`** (auto-creates on first run; also auto-migrates the legacy `.tsv`).
 3. **Read existing offers**: `SELECT url FROM offers` → known URLs.
 4. **Level 1 — ATS APIs (parallel)**: for each `tracked_companies` entry with `api:` defined and `enabled: true`, hit the structured feed (Greenhouse `/jobs`, Ashby GraphQL, Lever `?mode=json`, BambooHR `/careers/list`, Teamtailor `/jobs.rss`, Workday CXS `/jobs`). Parse per provider, collect `{title, url, company, portal}`.
-5. **Level 2 — LinkedIn via Apify**: invoke `lib/linkedin-scan.mjs`. For each enabled `linkedin_searches` entry, parse the LinkedIn URL (or read the structured `payload:` field) and call `valig~linkedin-jobs-scraper` with `skipJobId` populated from scan-history. For each new job ID returned, call `apimaestro~linkedin-job-detail` to resolve the canonical employer ATS URL plus the full JD payload. Save `jds/{NUM}-{slug}.md` with all header fields (URL = the resolved employer ATS URL, NOT the LinkedIn URL) and insert a `Fetched` row into `data/applications.md`. See "LinkedIn helper details" below.
+5. **Level 2 — LinkedIn via Apify**: invoke `lib/scan-linkedin.mjs`. For each enabled `linkedin_searches` entry, parse the LinkedIn URL (or read the structured `payload:` field) and call `valig~linkedin-jobs-scraper` with `skipJobId` populated from scan-history. For each new job ID returned, call `apimaestro~linkedin-job-detail` to resolve the canonical employer ATS URL plus the full JD payload. Save `data/jds/{NUM}-{slug}.md` with all header fields (URL = the resolved employer ATS URL, NOT the LinkedIn URL) and insert a `Fetched` row into `data/applications.md`. See "LinkedIn helper details" below.
 
-5b. **Level 2b — remoteineurope.com**: invoke `lib/remoteineurope-scan.mjs`. Fetches `https://remoteineurope.com/sitemap.xml`, dedups against scan-history.db (URL primary key), then fetches each new `/job/{slug}` page (parallel, concurrency 20). Parses `<title>{role} at {company}</title>` and the `<a class="apply-button">` href — that href is the canonical employer ATS URL (typically Greenhouse / Ashby / Workable / Workday). Applies title filter; inserts source URL into scan-history with `portal='remoteineurope'`; emits the resolved employer URL for dispatch. Free (pure HTTP, no Apify, no Firecrawl).
+5b. **Level 2b — remoteineurope.com**: invoke `lib/scan-remoteineurope.mjs`. Fetches `https://remoteineurope.com/sitemap.xml`, dedups against scan-history.db (URL primary key), then fetches each new `/job/{slug}` page (parallel, concurrency 20). Parses `<title>{role} at {company}</title>` and the `<a class="apply-button">` href — that href is the canonical employer ATS URL (typically Greenhouse / Ashby / Workable / Workday). Applies title filter; inserts source URL into scan-history with `portal='remoteineurope'`; emits the resolved employer URL for dispatch. Free (pure HTTP, no Apify, no Firecrawl).
 
    The auto-pipeline agent dispatched against the resolved URL fetches the full JD itself via `_fetch.md` Priority 1 (the resolved URL is almost always a structured ATS endpoint). Unlike LinkedIn, we don't prefetch the JD body here — the aggregator's copy is a stale re-render of the employer's page, so it's better to fetch fresh from the source.
 6. **Apply title filter** (in-process): keep rows whose `title` matches at least one `positive` keyword and zero `negative` keywords (case-insensitive).
@@ -85,7 +85,7 @@ After `scan.mjs` exits, the orchestrator can OPTIONALLY run Level 3 (WebSearch).
 
 11. **Final dispatch line**: union of Level 1+2 (from `scan.mjs`) plus Level 3 survivors. The orchestrator emits a final `DISPATCH_URLS=[...]` and the user's session fans out one `auto-pipeline` agent per URL.
 
-## LinkedIn helper details (`lib/linkedin-scan.mjs`)
+## LinkedIn helper details (`lib/scan-linkedin.mjs`)
 
 The helper exists so the LLM never has to reconstruct the Apify call. All title permutations, the `skipJobId` array, the actor invocations, and the per-JD detail fetch are pure Node.
 
@@ -104,13 +104,13 @@ What it does, in one zero-token pass:
    2. Compute canonical employer URL from `apply_details.application_url` (fallback: `https://www.linkedin.com/jobs/view/{id}` if the actor returned no resolved URL — easy-apply roles).
    3. Strip query string, trailing slash, `/application` suffix.
    4. Build slug `{company-slug}-{role-slug}`.
-   5. Write `jds/{NUM}-{slug}.md` with `**Fetch-method:** apify-linkedin`, `**Status:**` derived from `job_state`/`expire_at`, full Role Summary / Responsibilities / Requirements / Compensation / Other Details sections from `job_info.description`.
+   5. Write `data/jds/{NUM}-{slug}.md` with `**Fetch-method:** apify-linkedin`, `**Status:**` derived from `job_state`/`expire_at`, full Role Summary / Responsibilities / Requirements / Compensation / Other Details sections from `job_info.description`.
    6. Insert `Fetched` row into `data/applications.md`.
    7. Insert into `scan-history.db` with the LinkedIn URL (so the *next* scan dedups via `skipJobId`), `portal='linkedin-apify'`, `status='added'`.
    8. Release the NUM reservation marker.
 8. Return the list of new URLs (canonical ATS URLs) for `scan.mjs` to include in `DISPATCH_URLS`.
 
-The auto-pipeline agents that the user's session subsequently dispatches will hit the dedup at `_fetch.md` Step 1 (URL already in `jds/`). Step 1 is status-aware: when the matching `applications.md` row is `Fetched` (i.e. this scan prefetched the JD), the agent skips Steps 2–5 and proceeds directly to location-gate + scoring. No double-fetch, no duplicate Apify spend.
+The auto-pipeline agents that the user's session subsequently dispatches will hit the dedup at `_fetch.md` Step 1 (URL already in `data/jds/`). Step 1 is status-aware: when the matching `applications.md` row is `Fetched` (i.e. this scan prefetched the JD), the agent skips Steps 2–5 and proceeds directly to location-gate + scoring. No double-fetch, no duplicate Apify spend.
 
 ## Filter code reference (LinkedIn-side)
 
@@ -132,7 +132,7 @@ Both LinkedIn actors (`valig`, `apimaestro`) use Apify's managed proxy infrastru
 
 The only constraint we respect on our side:
 
-- **Account-level parallel cap**: 2 simultaneous Apify runs (current plan). `lib/linkedin-scan.mjs` enforces this with a small concurrency limiter.
+- **Account-level parallel cap**: 2 simultaneous Apify runs (current plan). `lib/scan-linkedin.mjs` enforces this with a small concurrency limiter.
 
 The historical "human pacing — 3–5s between navigations" rule applied only to authenticated CDP scraping. With Apify it does not apply.
 
@@ -175,7 +175,7 @@ CREATE TABLE offers (
 );
 ```
 
-LinkedIn rows store the LinkedIn URL (`linkedin.com/jobs/view/{id}`) so the next scan's `skipJobId` dedup works server-side. The corresponding JD file in `jds/` uses the resolved employer ATS URL as its canonical `**URL:**` line.
+LinkedIn rows store the LinkedIn URL (`linkedin.com/jobs/view/{id}`) so the next scan's `skipJobId` dedup works server-side. The corresponding JD file in `data/jds/` uses the resolved employer ATS URL as its canonical `**URL:**` line.
 
 The legacy `data/scan-history.tsv` is preserved as `.bak` after the one-shot SQLite migration.
 
@@ -208,7 +208,7 @@ Apify credits used: ~$N.NNN (search) + ~$N.NN (per-JD detail)
 DISPATCH_URLS=["https://...","https://..."]
 ```
 
-The caller parses the `DISPATCH_URLS=[...]` line and spawns one background `auto-pipeline` agent per URL. Pre-fetched LinkedIn JDs are dispatched as their canonical employer ATS URL — the agent's `_fetch.md` Step 1 detects the existing `jds/` entry with `Fetched` status and skips ahead to gate + score.
+The caller parses the `DISPATCH_URLS=[...]` line and spawns one background `auto-pipeline` agent per URL. Pre-fetched LinkedIn JDs are dispatched as their canonical employer ATS URL — the agent's `_fetch.md` Step 1 detects the existing `data/jds/` entry with `Fetched` status and skips ahead to gate + score.
 
 ## Maintenance
 

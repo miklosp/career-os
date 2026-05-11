@@ -35,7 +35,7 @@ agent-browser --cdp 9222 snapshot -i    # interactive-only refs (@eN)
 
 - NEVER click the Submit/Send/Apply button. Fill everything, take a final screenshot, hand off to the candidate.
 - Do not tick consent checkboxes that imply agreement to policies the candidate hasn't read — leave those for the candidate.
-- Use `agent-browser --cdp 9222 upload @eN <pdf-path>` for Resume fields; the PDF is typically in `output/{NUM}-*-cv.pdf`.
+- Use `agent-browser --cdp 9222 upload @eN <pdf-path>` for Resume fields; the PDF is typically in `output/customized-cvs/{NUM}-*-cv.pdf`.
 - After fill, screenshot top and bottom of the form to `/tmp/career-apply-screens/{NUM}-*.png` and present both to the candidate for review.
 
 ## Fallback — no browser control
@@ -52,7 +52,7 @@ Claude drafts answers for copy-paste.
 ```
 1. DETECT    → Read active Chrome tab (screenshot/URL/title)
 2. IDENTIFY  → Extract company + role from the page
-3. SEARCH    → Match against existing reports in reports/
+3. SEARCH    → Match against existing reports in data/reports/
 4. LOAD      → Read full report + Section G (if it exists)
 5. COMPARE   → Does the role on screen match the evaluated one? If changed → warn
 6. ANALYZE   → Identify ALL visible form questions
@@ -73,7 +73,7 @@ Claude drafts answers for copy-paste.
 ## Step 2 — Identify and search for context
 
 1. Extract company name and role title from the page
-2. Search in `reports/` by company name (Grep case-insensitive)
+2. Search in `data/reports/` by company name (Grep case-insensitive)
 3. If match found → load the full report
 4. If Section G exists → load prior draft answers as a base
 5. If NO match found → notify and offer to run a quick auto-pipeline

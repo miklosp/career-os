@@ -851,13 +851,13 @@ func ComputeProgressMetrics(apps []model.CareerApplication) model.ProgressMetric
 	return pm
 }
 
-// ScanOutputCVsByNum scans the output/ directory and returns a set of 3-digit
+// ScanOutputCVsByNum scans output/customized-cvs/ and returns a set of 3-digit
 // report numbers that already have a generated CV PDF on disk.
 func ScanOutputCVsByNum(careerOpsPath string) map[string]bool {
 	return scanOutputByNumSuffix(careerOpsPath, "-cv.pdf")
 }
 
-// ScanOutputReviewsByNum scans the output/ directory and returns a set of
+// ScanOutputReviewsByNum scans output/customized-cvs/ and returns a set of
 // 3-digit report numbers that have a pending CV review JSON on disk — meaning
 // the user has not yet walked through the fact-check findings.
 func ScanOutputReviewsByNum(careerOpsPath string) map[string]bool {
@@ -865,7 +865,7 @@ func ScanOutputReviewsByNum(careerOpsPath string) map[string]bool {
 }
 
 func scanOutputByNumSuffix(careerOpsPath, suffix string) map[string]bool {
-	outDir := filepath.Join(careerOpsPath, "output")
+	outDir := filepath.Join(careerOpsPath, "output", "customized-cvs")
 	entries, err := os.ReadDir(outDir)
 	if err != nil {
 		return nil
@@ -905,7 +905,7 @@ func CleanupDiscardedFiles(careerOpsPath string, app model.CareerApplication) []
 
 	var deleted []string
 
-	jdsDir := filepath.Join(careerOpsPath, "jds")
+	jdsDir := filepath.Join(careerOpsPath, "data", "jds")
 	if entries, err := os.ReadDir(jdsDir); err == nil {
 		for _, e := range entries {
 			name := e.Name()
@@ -918,11 +918,14 @@ func CleanupDiscardedFiles(careerOpsPath string, app model.CareerApplication) []
 		}
 	}
 
-	outDir := filepath.Join(careerOpsPath, "output")
+	outDir := filepath.Join(careerOpsPath, "output", "customized-cvs")
 	if entries, err := os.ReadDir(outDir); err == nil {
 		for _, e := range entries {
 			name := e.Name()
-			if strings.HasPrefix(name, prefix) && strings.HasSuffix(name, "-cv.html") {
+			if !strings.HasPrefix(name, prefix) {
+				continue
+			}
+			if strings.HasSuffix(name, "-cv.md") || strings.HasSuffix(name, "-cv.pdf") || strings.HasSuffix(name, "-cv-review.json") {
 				p := filepath.Join(outDir, name)
 				if os.Remove(p) == nil {
 					deleted = append(deleted, p)

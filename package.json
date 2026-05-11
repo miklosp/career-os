@@ -4,16 +4,14 @@
   "private": true,
   "description": "Personal AI job search pipeline — diverged fork of santifer/career-ops",
   "scripts": {
-    "doctor": "node doctor.mjs",
-    "verify": "node verify-pipeline.mjs",
-    "normalize": "node normalize-statuses.mjs",
-    "dedup": "node dedup-tracker.mjs",
+    "doctor": "node lib/doctor.mjs",
+    "verify": "node lib/verify-pipeline.mjs",
+    "normalize": "node lib/normalize-statuses.mjs",
+    "dedup": "node lib/dedup-tracker.mjs",
     "merge": "node merge-tracker.mjs",
-    "sync-check": "node cv-sync-check.mjs",
-    "liveness": "node check-liveness.mjs",
     "scan": "node scan.mjs",
-    "cv-llm": "node generate-cv-llm.mjs",
-    "fact-check": "node cv-fact-check.mjs"
+    "cv-llm": "node lib/generate-cv-llm.mjs",
+    "fact-check": "node lib/cv-fact-check.mjs"
   },
   "keywords": [
     "ai",
