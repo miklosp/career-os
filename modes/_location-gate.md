@@ -53,7 +53,9 @@ Fail if **both** of these are true:
   - Examples that fail: `full-remote-countries:US,CA` when home is Sweden; `full-remote-region:EU` is OK (EU includes Sweden, pass); `full-remote-countries:Spain,Portugal,Poland` when home is Sweden fails.
 - None of `remote_allowed_scopes` match the scope tokens.
 
-If the posting is `full-remote-global` or `full-remote-region:EU` (or similar superset), pass.
+If the posting is `full-remote-global` or `full-remote-region:{X}` where `{X}` is listed in `remote_allowed_scopes` (e.g. `EMEA`, `EU`, `Europe`, `Nordics`), pass. The policy file is the source of truth for which region tokens count as supersets — don't hardcode region membership here.
+
+**Upstream check:** if the JD header lists 10+ countries in `full-remote-countries:...` but the JD body says "anywhere in EMEA / EU / region X", the fetcher mis-transcribed the JSON-LD payroll list. The fix belongs in `modes/_fetch.md` (prose wins over JSON-LD country enumerations), not in this gate.
 
 ### Rule 2: `onsite_outside_home_country`
 

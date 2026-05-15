@@ -76,7 +76,7 @@ silently — log which worked in the saved JD header.
 | 1 | **ATS API** (`xh` GET/POST JSON) | Lever / Greenhouse / Ashby / Personio / Workday CXS / **LinkedIn (via Apify actor)** — see table below | Free or near-free, structured, fastest. Always try first if the URL host maps to a known ATS pattern. The LinkedIn row resolves the LinkedIn → employer ATS redirect server-side, so a `linkedin.com/jobs/view/{id}` URL becomes a real ATS URL plus a full JD payload in one round-trip. |
 | 2 | **`xh`** | Static HTML aggregators + Teamtailor (JSON-LD) | Free, no JS. Works on startup.jobs, remotive, welcometothejungle, **Teamtailor** (full job in embedded JSON-LD). SPAs that return shells — escalate. |
 | 3 | **Firecrawl `scrape`** | JS-rendered SPAs (Alva, Tally, Greenhouse SPAs, custom careers pages) | Paid credits but isolated per-call — no shared browser state, no CDP contamination. **Default for SPA fetches.** Requires `FIRECRAWL_API_KEY` in `.env`. Does NOT work on LinkedIn (auth wall) — but Priority 1's LinkedIn row already handles that case, so you should never reach Firecrawl with a LinkedIn URL. See "Firecrawl scrape" below. |
-| 4 | **CDP** (authenticated Chromium on `ws://127.0.0.1:9222`) | Cloudflare-walled hosts only (himalayas.app, some company careers where Firecrawl 403s) | Reuses user-managed cookies (Himalayas). Last-resort. **Known failure mode:** persistent profile state survives between agents — service workers, IndexedDB, and stale tabs can serve a prior fetch's content for an unrelated URL. Always cross-check the snapshot's company/role against the URL host before trusting it. See "Authenticated Chromium via CDP" below. |
+| 4 | **Authenticated agent-browser session** (`--session-name himalayas`, ephemeral) | Cloudflare-walled hosts only (himalayas.app, some company careers where Firecrawl 403s) | Spawns a per-call Chromium that loads cookies from the named session on disk and saves any updates back. Closes when done. No shared port, no persistent process, no cross-agent contamination. See "Authenticated agent-browser session" below. |
 | 5 | **Fresh Playwright** (`uv run --with playwright python3 ...`) | Last-resort SPA fallback when Firecrawl is out of credit and CDP is too risky | Spawns a clean ephemeral chromium per call — no shared profile, no contamination, but ~2s startup overhead. Only reach for this when both Firecrawl and the structured options have failed. |
 
 ### ATS API URL patterns
@@ -178,22 +178,41 @@ PY
 
 Set `**Fetch-method:** playwright-fresh-context`. Slower than Firecrawl (~2s startup) but free and uncontaminable.
 
-### Authenticated Chromium via CDP (Cloudflare-walled hosts only)
+### Authenticated agent-browser session (Cloudflare-walled hosts only)
 
-**Note on LinkedIn:** as of the LinkedIn → employer-ATS resolution section above, LinkedIn no longer requires CDP for the fetch path — the Apify `linkedin-job-detail` actor returns the canonical employer URL plus a complete payload without authenticated browsing. CDP for LinkedIn now only applies to *apply mode* (filling forms in a headed browser the user can watch).
+**Note on LinkedIn:** as of the LinkedIn → employer-ATS resolution section above, LinkedIn no longer requires an authenticated browser for the fetch path — the Apify `linkedin-job-detail` actor returns the canonical employer URL plus a complete payload server-side. The authenticated-session path described here is only for Cloudflare-walled hosts (Himalayas, certain company careers pages where Firecrawl 403s).
 
-Before using CDP, ensure Chromium on `:9222` is in **fetch mode** (headless, `$HOME/.chromium-debug` profile — persistent Himalayas cookies). The `agent-browser` skill ("Chromium CDP session management") has the full detect → ensure → launch protocol; use it idempotently. If apply mode is running, shut it down before falling through to CDP.
+The pattern is ephemeral, not persistent. Each fetch spawns its own headless Chromium, loads cookies from the named session on disk, runs the work, and **always** closes the browser before returning. No port :9222, no detect/ensure/launch protocol, no shared profile, no cross-agent state.
 
-Once CDP is up in fetch mode, use `agent-browser --cdp 9222` to reuse the authenticated session. Never create a fresh context — it loses auth. For CLI syntax and patterns, load the installed skill:
+```bash
+# Open + snapshot the page
+agent-browser --session-name himalayas open "{url}"
+agent-browser --session-name himalayas snapshot -i
+
+# Mandatory teardown — every code path must reach this, including failures
+agent-browser close --session-name himalayas
+```
+
+Wrap the open/snapshot in a `trap` or shell-level `finally` so the close runs even on error:
+
+```bash
+( agent-browser --session-name himalayas open "{url}" \
+  && agent-browser --session-name himalayas snapshot -i > /tmp/jd-{NUM}.txt
+) ; agent-browser close --session-name himalayas
+```
+
+For CLI syntax and patterns, load the installed skill:
 
 ```bash
 agent-browser skills get core
 ```
 
-Use CDP specifically for:
+**First-time auth on a new machine:** run `agent-browser --session-name himalayas --headed open https://himalayas.app/login` manually, log in once, then `agent-browser close --session-name himalayas`. Cookies are saved to disk under the session name and reload automatically on subsequent runs.
+
+Use this path specifically for:
 
 - **Cloudflare-walled hosts** (himalayas.app, some company careers) where `xh` / WebFetch / Firecrawl 403.
-- LinkedIn was previously listed here. It is no longer — use the Apify `linkedin-job-detail` actor instead (see "LinkedIn → employer ATS resolution" above). CDP-LinkedIn is now scoped strictly to *apply mode* (live form-filling), not fetch.
+- LinkedIn is NOT in this list — use the Apify `linkedin-job-detail` actor instead (see "LinkedIn → employer ATS resolution" above).
 - Human pacing on auth-walled hosts: 3–5s between navigations, 2s+ hydration. Velocity triggers bot detection on Cloudflare too.
 
 ## Step 4 — Save the JD
@@ -209,7 +228,7 @@ Schema (the location gate depends on these header fields — fill them all; if t
 
 **URL:** {canonical employer ATS URL — never LinkedIn}
 **Fetched:** {YYYY-MM-DD}
-**Fetch-method:** {ats-api | xh | agent-browser-lightpanda | agent-browser-chromium | cdp}
+**Fetch-method:** {ats-api | xh | firecrawl | agent-browser-session | playwright-fresh-context}
 **Posting age:** {X days ago | unspecified}
 **Status:** {active | expired}
 
@@ -244,6 +263,8 @@ Schema (the location gate depends on these header fields — fill them all; if t
 - `Timezone` keywords: "Must overlap with PST 9-5", "EU timezones", "CET ±2". If none, write `unspecified`.
 - `Visa/authorization` keywords: "Must be authorized to work in the US", "H1B only", "EU citizens only", "Visa sponsorship available".
 - `Relocation offered`: "Relocation package available", "Relocation assistance", "Must relocate to Berlin".
+
+**Prose wins over JSON-LD country lists.** Recruitee, Greenhouse, and Lever often emit a `JobPosting.applicantLocationRequirements` array with 10–20 specific countries. That list is almost always the **example payroll countries** (where the employer is set up to hire), NOT the eligibility scope. If the JD prose explicitly states a broader region — e.g. "anywhere in EMEA", "physically based within the EU", "remote across LATAM", "any EU timezone is fine" — the prose is authoritative. Use the region designation (`full-remote-region:EMEA`, `full-remote-region:EU`, `full-remote-region:LATAM`, etc.), NOT the country enumeration. Past incident: Hostaway #279 was wrongly `Skipped-Location` because the fetcher transcribed `applicantLocationRequirements: [ES,PT,GB,IT,HR,DE,NL,FR,EE,RO,CZ,GR,PL,IE,AT,FI,LV,LT]` into the header even though the JD's first paragraph said "please only apply if you are physically based within EMEA". When the two disagree, the prose is the contract; the JSON-LD list is hiring infrastructure.
 
 ## Step 5 — Register in applications.md
 

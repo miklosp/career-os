@@ -53,6 +53,10 @@ Multiple URLs = parallel agents (≤ 3 concurrent; keeps agent-browser / CDP ses
 | `style/cv-template.css`, `style/cover-letter.css`, `style/fonts/`, `lib/generate-cv-llm.mjs`, `render-cv-pdf.py`, `pyproject.toml`, `config/ats-prompt.md`, `.env` | CV personalization stack — Opus via Bifrost + WeasyPrint. |
 | `lib/cv-fact-check.mjs`, `config/cv-review-prompt.md` | Independent fact-checker for generated CVs — Gemini via Bifrost (`gemini-pro` alias). Interactive walkthrough flags fabrications missed by the generator, applies fixes in-place, re-renders the PDF on apply. Dashboard: pressing Enter on a row with `review-pending` status opens the walkthrough before the report. |
 | `scan.mjs` | Zero-token portal scanner — discovers URLs, inserts into `data/scan-history.db`, prints `DISPATCH_URLS=[...]` on stdout for Claude to dispatch fetch agents. Auto-migrates from legacy `scan-history.tsv` on first run. |
+| `modes/practice.md`, `modes/mock.md`, `modes/analyze.md`, `modes/storybank.md` | Practice & simulation layer — drill loop, full mock interview, real-transcript analysis, interactive story-bank management. All read `modes/_rubrics.md` (5-dim rubric + root cause taxonomy); `mock`/`analyze` also read `modes/_round-types.md`; `practice --type pm-lens` reads `modes/_role-drills.md`. |
+| `modes/_rubrics.md`, `modes/_round-types.md`, `modes/_role-drills.md` | Shared coaching references — answer rubric, round taxonomy with per-round weight shifts, PM Six-Lens drill. Read by practice/mock/analyze only; not loaded by the auto-pipeline. |
+| `data/score-history.md` | Append-only score log across `practice`/`mock`/`analyze`. Tab-separated, one row per scored round. |
+| `data/revisit-queue.md` | Active root causes (from `_rubrics.md` taxonomy) detected across multiple rounds. `practice` reads at session start; modes append/update entries; entries auto-resolve after 3+ sessions without repeat. |
 
 ### OpenCode Commands
 
@@ -190,18 +194,27 @@ All mode files in `modes/` must be in English. Reports and CVs still match the J
 
 Two-model pipeline. The Opus generator has a persistent "JD as vocabulary attractor" bias — even with explicit prompt rules, it lifts JD phrases into bullets. A different model family (Gemini) as an independent reviewer breaks those correlated errors.
 
+**Grounding inputs.** Generator and reviewer both read the evaluation report at `data/reports/{NUM}-*.md` (most-recent by mtime). Block A already enumerated the JD↔CV matches with cited CV lines and named the gaps — that work is reused, not re-derived. Block A Matches are pre-validated; Block A Gaps are forbidden territory. The story bank (`config/story-bank.md`) is the primary source for quantified outcomes — metrics must trace to a CV line or a story-bank entry. The raw JD only supplies exact wording for claims the report already validated.
+
+**Three severity tiers.** Findings carry one of:
+- `fabricated` — no support anywhere (CV, story bank, Block-A Match). Default action: apply the conservative fix.
+- `stretched` — thin source-CV support but plausible. Default action: apply the conservative downgrade.
+- `bridge` — intentional vocabulary substitution between CV phrasing and JD term (CV: "Agile" / JD: "Scrum"). The rendered CV always uses the conservative wording; the JD-vocabulary upgrade is offered via the walkthrough. Default action: **keep the CV text** (presumptively allowed); apply only if the user genuinely has the JD-term experience.
+
+**Bridges plumbing.** The generator emits a `<bridges>` JSON block at the end of its output. `generate-cv-llm.mjs` extracts it (so it doesn't appear in the rendered CV) and writes it to `output/customized-cvs/{NUM}-{slug}-cv-bridges.json`. `cv-fact-check.mjs` merges that file into the Gemini findings before saving the final review JSON. The reviewer can also emit its own `bridge` findings independently; both sources coexist with deduplication.
+
 **Dashboard flow (pressing `g` on a row):**
 
 ```
-generating  (Opus produces markdown + PDF)
+generating  (Opus produces markdown + bridges JSON; PDF deferred)
     ↓
-reviewing   (Gemini reads source CV + JD + generated CV, writes review JSON — non-interactive)
+reviewing   (Gemini reads source CV + report + JD + generated CV; bridges merged in)
     ↓
-review-pending  (review JSON on disk awaiting user walkthrough)
+review-pending  (merged review JSON on disk awaiting user walkthrough)
     ↓  (user presses Enter on the row, or F)
 interactive walkthrough:  per-finding [a]pprove [r]eject [e]dit [s]kip [q]uit
     ↓
-apply approved edits to the markdown; optionally regenerate PDF; delete review JSON
+apply accepted edits to the markdown; delete review JSON; render PDF (via main.go)
     ↓
 done  (CV + PDF ready to send; Enter now opens the report as normal)
 ```
@@ -209,12 +222,13 @@ done  (CV + PDF ready to send; Enter now opens the report as normal)
 **Precedence:** when a row has `review-pending` status, pressing Enter opens the review walkthrough BEFORE the report — forces the user through the fact-check before reading the scoring narrative. After the walkthrough exits, the report opens automatically.
 
 **Files:**
-- `lib/generate-cv-llm.mjs` — Opus generator, uses `config/ats-prompt.md`. Writes `output/customized-cvs/{NUM}-{slug}-cv.md` + `.pdf`.
+- `lib/generate-cv-llm.mjs` — Opus generator, uses `config/ats-prompt.md`. Reads `config/cv.md`, `config/story-bank.md`, `config/profile.yml`, the latest matching `data/reports/{NUM}-*.md`, and the JD. Writes `output/customized-cvs/{NUM}-{slug}-cv.md` and `output/customized-cvs/{NUM}-{slug}-cv-bridges.json`. PDF generation is deferred (`--no-pdf` in dashboard mode) to after the walkthrough.
 - `lib/cv-fact-check.mjs` — two-phase reviewer:
-  - `--review-only <cv>` → phase 1 only (Gemini call, saves review JSON, exits). Used by dashboard auto-chain.
+  - `--review-only <cv>` → phase 1 only (Gemini call, merges generator bridges, saves review JSON, exits). Used by dashboard auto-chain.
   - `<cv>` (no flag) → phase 2 walkthrough. If review JSON exists, skips the LLM call. Deletes JSON at end of walkthrough.
-- `config/cv-review-prompt.md` — reviewer prompt (fact-checker role, explicit scan list for fabricated patterns).
-- `output/customized-cvs/{NUM}-{slug}-cv-review.json` — persisted review findings; presence of this file is the "review-pending" signal.
+- `config/cv-review-prompt.md` — reviewer prompt (fact-checker role, three severity tiers, takes the evaluation report as a third input).
+- `output/customized-cvs/{NUM}-{slug}-cv-bridges.json` — generator's emitted bridges. Merged into the review JSON; harmless if left on disk after merge.
+- `output/customized-cvs/{NUM}-{slug}-cv-review.json` — persisted merged findings (fabricated + stretched + bridge). Presence of this file is the "review-pending" signal.
 
 **Dashboard keys on a row:**
 - `g` — generate CV and auto-chain review.
@@ -237,10 +251,26 @@ done  (CV + PDF ready to send; Enter now opens the report as normal)
 
 ## Offer Verification -- MANDATORY
 
-**NEVER trust WebSearch/WebFetch to verify if an offer is still active.** ALWAYS use `agent-browser` (via Chromium CDP for auth'd sites):
-1. `agent-browser snapshot -i <url>` — renders the page and returns an accessibility-tree snapshot
-2. Read the snapshot content
-3. Only footer/navbar without JD = closed. Title + description + Apply = active.
+**NEVER trust WebSearch/WebFetch to verify if an offer is still active.** Use Firecrawl first (no local browser, nothing to clean up); fall back to ephemeral `agent-browser` only when Firecrawl 403s or is dry.
+
+Firecrawl path:
+
+```bash
+set -a; source .env; set +a
+firecrawl scrape "<url>" -o /tmp/verify.md
+```
+
+agent-browser fallback — **ephemeral session, mandatory close**:
+
+```bash
+agent-browser --session-name verify open "<url>" \
+  && agent-browser --session-name verify snapshot -i
+agent-browser close --session-name verify     # MUST run, even on failure
+```
+
+Wrap in a trap/`;` so the close always executes. Skipping it is how Chromium processes accumulate.
+
+Classify: only footer/navbar without JD = closed. Title + description + Apply = active.
 
 See `agent-browser skills get core` for full CLI patterns (snapshot refs, clicks, fills, sessions).
 
@@ -250,7 +280,7 @@ See `agent-browser skills get core` for full CLI patterns (snapshot refs, clicks
 
 ## Stack and Conventions
 
-- Node.js (mjs modules), `agent-browser` (scraping via Chromium CDP), Playwright (only as a doctor.mjs install-check probe), WeasyPrint via `render-cv-pdf.py` (PDF), YAML (config), HTML/CSS (template), Markdown (data), Canva MCP (optional visual CV)
+- Node.js (mjs modules), `agent-browser` (ephemeral session-named Chromium browsers; every invocation closes with `agent-browser close --session-name <name>`, no persistent CDP port), Playwright (only as a doctor.mjs install-check probe and the last-resort SPA fallback in `_fetch.md` Priority 5), WeasyPrint via `render-cv-pdf.py` (PDF), YAML (config), HTML/CSS (template), Markdown (data), Canva MCP (optional visual CV)
 - Go (dashboard TUI)
 - Scripts in `.mjs`, configuration in YAML
 - Output in `output/` (gitignored), Reports in `data/reports/`

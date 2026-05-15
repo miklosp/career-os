@@ -13,7 +13,7 @@ The mode runs entirely as zero-LLM-token shell + Node helpers. Browser-based dis
 | 2b | **remoteineurope.com** sitemap + per-page scrape; aggregator that links straight to employer ATS via clean apply-button | `lib/scan-remoteineurope.mjs` (zero-token; free; called from `scan.mjs`) |
 | 3 | **WebSearch queries** for `search_queries` with `site:` filters (broad discovery, agent-executed because WebSearch needs an LLM tool call) | `modes/scan.md` agent path |
 
-The historical "Level 3 — agent-browser via Chromium CDP" sub-flow is gone. CDP for LinkedIn search was the source of session-contamination bugs and is replaced by the Apify path. CDP for non-LinkedIn careers pages is replaced by Firecrawl in the per-JD `_fetch.md` ladder. The persistent Chromium on `:9222` now exists solely for `apply` mode.
+The historical "Level 3 — agent-browser via Chromium CDP" sub-flow is gone. CDP for LinkedIn search was the source of session-contamination bugs and is replaced by the Apify path. CDP for non-LinkedIn careers pages is replaced by Firecrawl in the per-JD `_fetch.md` ladder. No persistent Chromium runs anywhere in the system anymore — apply mode also spawns an ephemeral session-named browser on demand and closes it when the candidate is done.
 
 ## Configuration
 
@@ -30,7 +30,7 @@ Read `config/profile.yml` for `target_roles` (used to validate that LinkedIn sea
 
 None. The whole scan is HTTP + structured APIs. Apify, Greenhouse, Ashby, Lever, BambooHR, Teamtailor, and Workday CXS all return JSON or RSS without authentication.
 
-If `apply` mode happens to be running on `:9222` in headed mode, leave it alone — scan never touches CDP.
+Liveness verification of Level 3 (WebSearch) results does spawn an ephemeral `agent-browser` session — see Step 10. That session is always closed before the next URL is verified.
 
 ## Recommended execution
 
@@ -76,12 +76,19 @@ After `scan.mjs` exits, the orchestrator can OPTIONALLY run Level 3 (WebSearch).
    WebSearch results can be stale (Google caches for weeks). Levels 1 and 2 are inherently real-time. Only Level 3 needs this check.
 
    For each new URL from Level 3 (sequential — never parallel browser sessions for liveness):
-   1. `agent-browser snapshot -i <url>` (or Firecrawl)
-   2. Classify:
+   1. Try Firecrawl first (`firecrawl scrape "<url>" -o /tmp/verify.md`) — no local browser, no leak risk. Fall back to agent-browser only if Firecrawl 403s or is out of credits.
+   2. agent-browser fallback (ephemeral, **always closed**):
+      ```bash
+      agent-browser --session-name verify open "<url>" \
+        && agent-browser --session-name verify snapshot -i > /tmp/verify-snap.txt
+      agent-browser close --session-name verify
+      ```
+      The close MUST run even if open or snapshot fails — wrap in a trap or use `;` separation so it always executes.
+   3. Classify:
       - **Active**: job title visible + role description + Apply/Submit control in main content.
       - **Expired** signals: `?error=true` in final URL (Greenhouse), text "no longer available" / "position has been filled" / "page not found", footer-only content (< ~300 chars).
-   3. Expired → insert into `scan-history.db` with `status='skipped_expired'`, discard.
-   4. Active → continue to dispatch.
+   4. Expired → insert into `scan-history.db` with `status='skipped_expired'`, discard.
+   5. Active → continue to dispatch.
 
 11. **Final dispatch line**: union of Level 1+2 (from `scan.mjs`) plus Level 3 survivors. The orchestrator emits a final `DISPATCH_URLS=[...]` and the user's session fans out one `auto-pipeline` agent per URL.
 

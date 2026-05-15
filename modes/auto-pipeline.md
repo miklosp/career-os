@@ -10,15 +10,14 @@ One or more URLs (or one pasted JD). If multiple URLs: fan out.
 
 ## Browser prerequisite
 
-Before any agent dispatches, ensure Chromium on `:9222` is in **fetch mode** (headless, `$HOME/.chromium-debug` profile). The `agent-browser` skill ("Chromium CDP session management") has the detect → ensure → launch protocol; follow it idempotently so running the pipeline never steals the browser out from under an open apply session without a deliberate swap. If apply mode is currently running, shut it down before fan-out.
+None. There is no persistent Chromium and no shared CDP port. When a fetch step genuinely needs a browser (Cloudflare-walled hosts only — see `modes/_fetch.md` Priority 4), it spawns an ephemeral `agent-browser` session named for the task, runs its work, and calls `agent-browser close --session-name <name>` before exit. Cookies for auth-walled hosts persist on disk via the session name, so the next run reloads them without keeping a browser alive.
 
 ## Orchestration
 
 For **each** URL the user supplied, dispatch one background agent in parallel.
-Bound concurrency to **≤ 3** active agents at any time — keeps browser sessions
-(agent-browser via CDP) and target-site rate limits healthy, and avoids
-saturating the CDP endpoint when multiple agents share it. Larger lists: queue
-the rest and run them as earlier agents finish.
+Bound concurrency to **≤ 3** active agents at any time — keeps target-site rate
+limits healthy and stays under the Apify account-level parallel-run cap.
+Larger lists: queue the rest and run them as earlier agents finish.
 
 Each agent runs the same four-step flow and exits. The user is not blocked
 waiting for any of them.

@@ -47,14 +47,22 @@ const (
 // finding mirrors one entry in the review JSON plus a derived in-memory state.
 type finding struct {
 	ID            string
-	Severity      string // "fabricated" | "stretched"
+	Severity      string // "fabricated" | "stretched" | "bridge"
 	Section       string
-	GeneratedText string
+	GeneratedText string // verbatim from the review JSON — what the reviewer claimed is in the CV
 	SourceCV      string
 	Issue         string
 	ProposedFix   string
 
 	State findingState
+	// MatchedText is the actual CV substring that GeneratedText resolves to.
+	// LLM output is whitespace-imprecise: it may quote a phrase with single
+	// spaces where the CV has double, may include or omit hard newlines, etc.
+	// MatchedText is resolved at load time via a whitespace-tolerant search
+	// and is guaranteed to be a verbatim substring of cvContent. All downstream
+	// substitution and block-range logic uses MatchedText, not GeneratedText.
+	// Empty string means no resolution was possible (→ fsStale).
+	MatchedText string
 	// AppliedText is the replacement currently in the CV markdown (proposed_fix
 	// for `apply`, user input for `edit`). Empty otherwise.
 	AppliedText string
@@ -79,6 +87,7 @@ type reviewFinding struct {
 type reviewSummary struct {
 	FabricatedCount int    `json:"fabricated_count"`
 	StretchedCount  int    `json:"stretched_count"`
+	BridgeCount     int    `json:"bridge_count"`
 	OverallVerdict  string `json:"overall_verdict"`
 }
 
@@ -193,7 +202,8 @@ func NewFactCheckModel(
 			Issue:         rfd.Issue,
 			ProposedFix:   rfd.ProposedFix,
 		}
-		if strings.Contains(m.cvContent, rfd.GeneratedText) {
+		f.MatchedText = resolveMatch(m.cvContent, rfd.GeneratedText)
+		if f.MatchedText != "" {
 			f.State = fsPending
 		} else {
 			f.State = fsStale
@@ -305,6 +315,9 @@ func (m FactCheckModel) handleKey(msg tea.KeyMsg) (FactCheckModel, tea.Cmd) {
 		// phrase. Snapshot it for the apply step.
 		block := m.activeBlockText()
 		if block == "" {
+			block = f.MatchedText
+		}
+		if block == "" {
 			block = f.GeneratedText
 		}
 		m.editingOriginalBlock = block
@@ -321,15 +334,27 @@ func (m FactCheckModel) handleKey(msg tea.KeyMsg) (FactCheckModel, tea.Cmd) {
 	return m, nil
 }
 
-// applyReplacement substitutes generatedText with replacement in the CV
+// applyReplacement substitutes the matched text with `replacement` in the CV
 // markdown, persists to disk, updates state, and refreshes wrap/scroll.
+// Uses MatchedText (the resolved canonical substring), not GeneratedText (the
+// raw reviewer claim), so whitespace-imprecise quotes still apply correctly.
 // Returns false if the target text was missing or save failed.
 func (m *FactCheckModel) applyReplacement(idx int, replacement string, newState findingState) bool {
 	if idx < 0 || idx >= len(m.findings) {
 		return false
 	}
 	f := &m.findings[idx]
-	newCV := strings.Replace(m.cvContent, f.GeneratedText, replacement, 1)
+	target := f.MatchedText
+	if target == "" {
+		// Late-resolve in case the CV was mutated since load.
+		target = resolveMatch(m.cvContent, f.GeneratedText)
+		f.MatchedText = target
+	}
+	if target == "" {
+		f.State = fsStale
+		return false
+	}
+	newCV := strings.Replace(m.cvContent, target, replacement, 1)
 	if newCV == m.cvContent {
 		f.State = fsStale
 		return false
@@ -483,7 +508,10 @@ func (m *FactCheckModel) recomputeVisualLines() {
 
 	m.findingBlocks = m.findingBlocks[:0]
 	for _, f := range m.findings {
-		needle := f.GeneratedText
+		needle := f.MatchedText
+		if needle == "" {
+			needle = f.GeneratedText
+		}
 		if f.State == fsApplied || f.State == fsEdited {
 			needle = f.AppliedText
 		}
@@ -793,9 +821,13 @@ func (m FactCheckModel) styleVisualLine(line string, logicalIdx int) string {
 	case fsStale:
 		fg = m.theme.Subtext
 	default: // pending
-		fg = m.theme.Red
-		if f.Severity == "stretched" {
+		switch f.Severity {
+		case "bridge":
+			fg = m.theme.Sky
+		case "stretched":
 			fg = m.theme.Yellow
+		default: // "fabricated" and unknown
+			fg = m.theme.Red
 		}
 	}
 
@@ -839,26 +871,73 @@ func (m FactCheckModel) renderRight(bh int) string {
 	lines = append(lines, wrap(body.Render(f.Issue), rw-2)...)
 	lines = append(lines, "")
 
-	// Offending text — pinpoints the phrase inside the highlighted block.
-	lines = append(lines, label.Render("Offending text"))
-	if strings.TrimSpace(f.GeneratedText) == "" {
+	// Flagged phrase — what's currently in the CV. Use the resolved MatchedText
+	// (the actual CV substring after whitespace-tolerant matching) so the user
+	// sees what will actually be replaced, not what the reviewer typed.
+	phraseLabel := "Currently in CV"
+	if f.Severity == "bridge" {
+		phraseLabel = "In CV (conservative)"
+	}
+	lines = append(lines, label.Render(phraseLabel))
+	displayPhrase := f.MatchedText
+	if displayPhrase == "" {
+		displayPhrase = f.GeneratedText // fallback for stale findings
+	}
+	if strings.TrimSpace(displayPhrase) == "" {
 		lines = append(lines, subtext.Italic(true).Render("(no specific phrase recorded)"))
 	} else {
-		offending := lipgloss.NewStyle().Foreground(m.theme.Red).Render(f.GeneratedText)
-		if f.Severity == "stretched" {
-			offending = lipgloss.NewStyle().Foreground(m.theme.Yellow).Render(f.GeneratedText)
+		var phraseColor lipgloss.Color
+		switch f.Severity {
+		case "stretched":
+			phraseColor = m.theme.Yellow
+		case "bridge":
+			phraseColor = m.theme.Sky
+		default:
+			phraseColor = m.theme.Red
 		}
-		lines = append(lines, wrap(offending, rw-2)...)
+		phraseStyle := lipgloss.NewStyle().Foreground(phraseColor)
+		// Preserve logical line breaks (multi-line matches) but wrap each line
+		// to the pane width. No substitution, no splicing — just verbatim.
+		for _, ln := range strings.Split(displayPhrase, "\n") {
+			for _, vl := range wrapPlainLine(ln, rw-2) {
+				lines = append(lines, phraseStyle.Render(vl))
+			}
+		}
 	}
 	lines = append(lines, "")
 
-	// Proposed fix preview — show the line as it will look post-apply.
-	lines = append(lines, label.Render("After apply fix"))
-	if f.GeneratedText == "" {
+	// Replacement — what the apply would put in place. Shown as a standalone
+	// block, NOT spliced into the surrounding line context (that ambiguity is
+	// the source of "did this concatenate or substitute?" confusion). The
+	// left pane shows the bullet/paragraph in context with the match highlighted.
+	fixLabel := "Becomes"
+	if f.Severity == "bridge" {
+		fixLabel = "Becomes (JD vocabulary upgrade)"
+	}
+	lines = append(lines, label.Render(fixLabel))
+	switch {
+	case displayPhrase == "":
 		lines = append(lines, subtext.Italic(true).Render("(no replacement available)"))
-	} else {
-		preview := m.renderReplacementPreview(f.GeneratedText, f.ProposedFix, rw-2)
-		lines = append(lines, preview...)
+	case f.ProposedFix == "":
+		// Empty fix = delete. Render the would-be-removed text with strikethrough.
+		strike := lipgloss.NewStyle().Foreground(m.theme.Subtext).Strikethrough(true)
+		lines = append(lines, subtext.Italic(true).Render("(the phrase above is removed)"))
+		for _, ln := range strings.Split(displayPhrase, "\n") {
+			for _, vl := range wrapPlainLine(ln, rw-2) {
+				lines = append(lines, strike.Render(vl))
+			}
+		}
+	default:
+		fixStyle := lipgloss.NewStyle().Foreground(m.theme.Green).Bold(true)
+		for _, ln := range strings.Split(f.ProposedFix, "\n") {
+			for _, vl := range wrapPlainLine(ln, rw-2) {
+				lines = append(lines, fixStyle.Render(vl))
+			}
+		}
+	}
+	if f.Severity == "bridge" {
+		lines = append(lines, "")
+		lines = append(lines, subtext.Italic(true).Render("Default: keep CV text. Press `a` to upgrade."))
 	}
 	lines = append(lines, "")
 
@@ -891,74 +970,111 @@ func (m FactCheckModel) renderRight(bh int) string {
 	return style.Render(strings.Join(lines, "\n"))
 }
 
-// renderReplacementPreview returns wrapped right-pane lines showing the CV
-// line containing `target` with `target` swapped for `replacement`. The marker
-// (replacement, or strikethrough target on remove) is highlighted; the rest of
-// the line renders dim so the change stands out in context.
-func (m FactCheckModel) renderReplacementPreview(target, replacement string, w int) []string {
-	dim := lipgloss.NewStyle().Foreground(m.theme.Subtext)
-	green := lipgloss.NewStyle().Foreground(m.theme.Green).Bold(true)
-	strike := lipgloss.NewStyle().Foreground(m.theme.Subtext).Strikethrough(true)
-
+// resolveMatch finds `target` in `content` and returns the actual content
+// substring that matches. LLM-produced `generated_text` is whitespace-
+// imprecise: it may collapse double spaces to single, swap hard newlines for
+// spaces, or vice versa. Exact substring matching fails on these — silently
+// stale-ing findings the reviewer correctly identified.
+//
+// Strategy:
+//  1. Exact match. Cheap, covers the typical case.
+//  2. Whitespace-normalized match: collapse runs of any whitespace to a single
+//     space on both sides, locate the normalized target in the normalized
+//     content, then map the normalized range back to original byte offsets.
+//
+// Returns "" if no match. The returned string is guaranteed to be a verbatim
+// substring of `content`, so downstream strings.Replace / strings.Contains
+// operations on it cannot silently fail.
+func resolveMatch(content, target string) string {
 	if target == "" {
-		return []string{dim.Render("(no target)")}
+		return ""
 	}
-	idx := strings.Index(m.cvContent, target)
-	if idx < 0 {
-		return wrap(green.Render(replacement), w)
+	if strings.Contains(content, target) {
+		return target
 	}
-	lineStart := strings.LastIndex(m.cvContent[:idx], "\n") + 1
-	lineEndOff := strings.Index(m.cvContent[idx:], "\n")
-	lineEnd := len(m.cvContent)
-	if lineEndOff != -1 {
-		lineEnd = idx + lineEndOff
+	normTarget := normalizeWhitespace(target)
+	if normTarget == "" {
+		return ""
 	}
-	line := m.cvContent[lineStart:lineEnd]
-	relIdx := idx - lineStart
-	before := line[:relIdx]
-	after := line[relIdx+len(target):]
-
-	// Compose the plain projection of the post-change line. For "remove"
-	// (empty replacement), keep the target text in place so the user can see
-	// what would disappear, struck through.
-	var marker string
-	var markerStyle lipgloss.Style
-	if replacement == "" {
-		marker = target
-		markerStyle = strike
+	// Build normalized content alongside a map from normalized-byte-index back
+	// to original-byte-index. Each entry in normToOrig is the start of the run
+	// of original bytes that the normalized byte at the same index came from.
+	var normBuf strings.Builder
+	normBuf.Grow(len(content))
+	normToOrig := make([]int, 0, len(content))
+	prevWS := false
+	for i := 0; i < len(content); i++ {
+		c := content[i]
+		if c == ' ' || c == '\t' || c == '\n' || c == '\r' {
+			if prevWS {
+				continue
+			}
+			normBuf.WriteByte(' ')
+			normToOrig = append(normToOrig, i)
+			prevWS = true
+		} else {
+			normBuf.WriteByte(c)
+			normToOrig = append(normToOrig, i)
+			prevWS = false
+		}
+	}
+	normContent := normBuf.String()
+	hit := strings.Index(normContent, normTarget)
+	if hit < 0 {
+		return ""
+	}
+	endIdx := hit + len(normTarget)
+	if hit >= len(normToOrig) || endIdx-1 >= len(normToOrig) {
+		return ""
+	}
+	origStart := normToOrig[hit]
+	// The original-byte range ends at the last byte of the last run included
+	// in the normalized match. To capture trailing whitespace inside that run,
+	// extend origEnd up to (but not past) the next normalized byte's origin.
+	var origEnd int
+	if endIdx < len(normToOrig) {
+		origEnd = normToOrig[endIdx]
 	} else {
-		marker = replacement
-		markerStyle = green
+		origEnd = len(content)
 	}
-	plain := before + marker + after
-	visual := wrapPlainLine(plain, w)
-	for i, vl := range visual {
-		visual[i] = m.styleLineWithMarker(vl, marker, markerStyle, dim)
+	if origStart < 0 || origEnd > len(content) || origStart >= origEnd {
+		return ""
 	}
-	return visual
+	return content[origStart:origEnd]
 }
 
-// styleLineWithMarker styles a plain visual line by painting the first
-// occurrence of `needle` with `markerStyle` and the rest with `baseStyle`.
-func (m FactCheckModel) styleLineWithMarker(line, needle string, markerStyle, baseStyle lipgloss.Style) string {
-	if needle == "" {
-		return baseStyle.Render(line)
+// normalizeWhitespace collapses any run of [space, tab, newline, CR] to a
+// single ASCII space. Used as the indexing key in resolveMatch.
+func normalizeWhitespace(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	prevWS := false
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if c == ' ' || c == '\t' || c == '\n' || c == '\r' {
+			if prevWS {
+				continue
+			}
+			b.WriteByte(' ')
+			prevWS = true
+		} else {
+			b.WriteByte(c)
+			prevWS = false
+		}
 	}
-	idx := strings.Index(line, needle)
-	if idx < 0 {
-		return baseStyle.Render(line)
-	}
-	return baseStyle.Render(line[:idx]) +
-		markerStyle.Render(line[idx:idx+len(needle)]) +
-		baseStyle.Render(line[idx+len(needle):])
+	return b.String()
 }
 
 func (m FactCheckModel) renderSeverityPill(f finding) string {
 	color := m.theme.Red
 	label := "FABRICATED"
-	if f.Severity == "stretched" {
+	switch f.Severity {
+	case "stretched":
 		color = m.theme.Yellow
 		label = "STRETCHED"
+	case "bridge":
+		color = m.theme.Sky
+		label = "BRIDGE"
 	}
 	return lipgloss.NewStyle().Bold(true).Foreground(color).Render("● " + label)
 }

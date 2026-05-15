@@ -1,9 +1,9 @@
 ---
 name: career-ops
-description: AI job search command center -- evaluate offers, generate CVs, scan portals, track applications
+description: AI job search command center -- evaluate offers, generate CVs, scan portals, track applications, interview practice
 user_invocable: true
 args: mode
-argument-hint: "[scan | pdf | apply | tracker | interview-prep | update]"
+argument-hint: "[scan | pdf | apply | tracker | interview-prep | practice | mock | analyze | storybank]"
 ---
 
 # career-ops -- Router
@@ -21,6 +21,10 @@ Determine the mode from `{{mode}}`:
 | `apply` | `apply` |
 | `scan` | `scan` |
 | `interview-prep` | `interview-prep` |
+| `practice` (optional `--type ...`, `--story S0XX`) | `practice` |
+| `mock` (optional `--company ...`, `--round-type ...`, `--length ...`) | `mock` |
+| `analyze --transcript {path}` (optional `--company ...`) | `analyze` |
+| `storybank` (optional `review` / `add` / `status`) | `storybank` |
 
 **Auto-pipeline detection:** If `{{mode}}` is not a known sub-command, treat it as input to the pipeline:
 
@@ -49,7 +53,17 @@ Utilities:
   /career-ops pdf       → generate ATS-optimized CV + PDF (Opus 4.7 via Bifrost)
   /career-ops tracker   → application status overview
   /career-ops apply     → live application assistant (reads form + drafts answers)
-  /career-ops interview-prep → company-specific interview prep
+  /career-ops interview-prep → company-specific interview prep (research artifact)
+
+Practice & simulation:
+  /career-ops practice [--type ...] [--story S0XX]
+                        → drill loop: scored rounds against 5-dim rubric
+  /career-ops mock [--company ...] [--round-type ...] [--length ...]
+                        → full simulated interview, post-mock debrief
+  /career-ops analyze --transcript {path} [--company ...]
+                        → score a real-interview transcript with triage
+  /career-ops storybank [review | add | status]
+                        → interactive story-bank management (review = default)
 
 CV personalization is user-triggered only — press `g` in the dashboard on an Evaluated row.
 ```
