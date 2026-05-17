@@ -10,7 +10,7 @@ This mode is **interactive and dictation-friendly**. The candidate speaks in nat
 2. `modes/_rubrics.md` — Strength score anchors (read on demand when scoring a story's strength)
 3. `data/score-history.md` — optional, only read for `status` if it exists (to surface stories with weak recent performance)
 
-Do NOT read `config/cv.md` or `config/_profile.md` here. The storybank is its own surface. The candidate may reference experiences from those files during dictation; that's fine — capture what they say, don't auto-cross-reference.
+Do NOT read `config/cv.md` or `config/profile.md` here. The storybank is its own surface. The candidate may reference experiences from those files during dictation; that's fine — capture what they say, don't auto-cross-reference.
 
 ## Subcommand routing
 

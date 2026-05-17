@@ -1,33 +1,42 @@
-# Mode: _eval — Lean evaluation (A/B/C/D scored, F Posting Legitimacy)
+# Mode: _eval — Lean evaluation (A/B/C/D scored)
 
 Called after `modes/_location-gate.md` returns ALLOW. Reads
-`data/jds/{NUM}-*.md` plus `config/cv.md` and `config/_profile.md`. Writes
-`data/reports/{NUM}-{company-slug}-{YYYY-MM-DD}.md` and a TSV row to
-`data/tracker-additions/{NUM}-{company-slug}.tsv`.
+`data/jds/{NUM}-*.md`, `config/cv.md`, and `config/profile.md`.
+
+Writes `data/reports/{NUM}-{company-slug}-{YYYY-MM-DD}.md` and a TSV row
+to `data/tracker-additions/{NUM}-{company-slug}.tsv`.
+
+**This is a triage pass, not a dossier.** It runs on every fetched JD,
+cheaply, with **zero WebSearch**. Everything that needs the open web —
+compensation/negotiation intel, posting-legitimacy verification, company
+health and growth signals — is deferred to `modes/interview-prep.md`,
+which only runs for the roles that come back to the candidate. Score off
+the JD text and the candidate's own files; do not gather anything else.
 
 Narrative style only. No attribute tables, no JD→CV mapping tables, no
-STAR multi-column tables. Prose bullets. See `data/reports/013-zyte-2026-04-16.md`
-for the target look and feel.
+STAR multi-column tables. Prose bullets. See `templates/report.example.md`
+(committed; `data/reports/` is gitignored) for the exact target look and
+feel — header label order and bullet density.
 
 ## Step 0 — Archetype detection
 
-Classify into one or two archetypes from `modes/_shared.md` (Archetype
-Detection). This controls framing in Block B and proof-point selection.
+Classify into one or two archetypes from `config/profile.md` (Target Roles
+& Archetypes). This controls framing in Block B and proof-point selection.
 
 ## Report shape
 
 Save to `data/reports/{NUM}-{company-slug}-{YYYY-MM-DD}.md` using exactly this
 header. The dashboard parser (`dashboard/internal/data/career.go`) reads
 `**URL:**`, `**Summary:**`, and `**Location:**` — keep those labels verbatim.
-`**ID:**` is human-facing; `**Score:**` is picked up from the applications.md
-row, not the report header. PDF status lives only in applications.md (dashboard
-reads the ✅/❌ from the PDF column there) — do NOT put a `**PDF:**` line in the
-report header, it goes stale.
+`**ID:**` is human-facing; `**Score:**` is the silently-computed weighted mean
+(see "Score" below) and is also picked up from the applications.md row. PDF
+status lives only in applications.md (dashboard reads the ✅/❌ from the PDF
+column there) — do NOT put a `**PDF:**` line in the report header, it goes stale.
 
 ```markdown
 **Score:** {X.X/5}
 **ID:** {NUM}
-**URL:** {canonical employer ATS URL}
+**URL:** {copy the canonical URL verbatim from the JD's `**URL:**` header — employer ATS URL, or a LinkedIn URL for easy-apply roles}
 **Summary:** {Summary of the company and the role.}
 **Location:** {Location or remote policy}
 
@@ -35,8 +44,12 @@ report header, it goes stale.
 ```
 
 
-Then the six blocks in narrative form. Each block: 3–6 short bullets, no
-tables. Each block carries its own `— X/5` score in the header.
+Then the four scored blocks in narrative form, followed by Recommended
+Next Step and Extracted Keywords. Each block: 3–6 short bullets, no
+tables. Each block carries its own `— X/5` score in the header. There is
+**no Block E section and no Block F section** — the global score is the
+`**Score:**` header value (computed silently, never shown as a
+calculation); legitimacy is not assessed at this stage.
 
 ### A: CV Match — X/5
 
@@ -48,45 +61,55 @@ What the JD asks for, and how closely `config/cv.md` matches.
 
 ### B: North Star — X/5
 
-Fit with the user's target archetypes from `config/_profile.md`.
+Fit with the user's target archetypes from `config/profile.md`.
 
 - Is this a primary / secondary / adjacent archetype?
 - Seniority alignment (IC vs lead vs executive — does the JD level match the user's target level?).
-- Stage fit (Seed / Series A–C / enterprise).
-- Apply the bonuses/penalties from `_profile.md` "Scoring Adjustments" (AI-native +0.3, dev-tooling +0.2, etc.) and say which applied.
+- Stage fit, only as stated in the JD (Seed / Series A–C / enterprise — do not WebSearch to find it).
+- Apply the bonuses/penalties from `config/profile.md` "Scoring Adjustments" (AI-native +0.3, dev-tooling +0.2, etc.) and say which applied.
 
 ### C: Cultural Signals — X/5
 
-Everything qualitative the JD reveals about the company, minus compensation.
+Everything qualitative the **JD text itself** reveals about the company.
+Do not WebSearch for team size, funding, or growth — that is
+interview-prep's job for callbacks.
 
 - Remote policy as stated (EU-remote / Stockholm hybrid / onsite Berlin with relocation).
-- Team size, reporting structure, stage, growth signals from a quick WebSearch.
 - Domain fit — does the product sit in a space the user has credibility in?
 - Language / tone of the JD (over-corporate? builder-vibe? red flags?).
+- Any team / reporting structure the JD explicitly describes (taken at face value, not researched).
 
 ### D: Red Flags — X/5
 
-Blockers, warnings, negative adjustments. Higher score = fewer red flags.
+Blockers, warnings, negative adjustments, **read off the JD only**.
+Higher score = fewer red flags.
 
-- Hiring freeze / recent layoffs (one WebSearch: `"{company}" layoffs 2025-2026`).
 - Overloaded JD (entry-level title + staff-level requirements, unrealistic years / tech age ratios).
 - Role-level mismatch (IC role when user wants Head+; scope unclear).
 - Non-obvious culture smells (pure individual-contributor design role; no equity; weird probation clauses).
+- Internal contradictions or vagueness in the JD itself (no concrete responsibilities, copy-paste boilerplate).
 
-### E: Global Score — X.X/5
+### Score
 
-Weighted mean across the four scored blocks:
+Compute the weighted global score silently:
 
-```
-E = A × 0.35 + B × 0.30 + C × 0.20 + D × 0.15
-```
+| Block | What it measures | Weight |
+|-------|-----------------|--------|
+| A: CV Match | Skills, experience, proof-points alignment | 0.35 |
+| B: North Star | Fit with the user's target archetypes (from `config/profile.md`) | 0.30 |
+| C: Cultural Signals | Remote policy, domain fit, JD tone (JD text only) | 0.20 |
+| D: Red Flags | Blockers, warnings, negative adjustments (JD text only) | 0.15 |
 
-Round to one decimal. Follow with one or two sentences of recommendation:
+`Global = A×0.35 + B×0.30 + C×0.20 + D×0.15`. Write it, rounded to one
+decimal, into the `**Score:**` header line and the tracker TSV. **Do
+not** print the calculation, a Block E section, or a restated score-band
+sentence in the report body — the header value, the Summary, and the
+Recommended Next Step already carry that signal.
 
-- 4.5+ → apply immediately, draft Block H below too
-- 4.0–4.4 → apply, good match
-- 3.5–3.9 → apply only if there's a specific reason
-- Below 3.5 → recommend against applying
+Bands (drive the Recommended Next Step; never printed as a band): 4.5+
+strong, apply immediately · 4.0–4.4 good, worth applying · 3.5–3.9
+decent, apply only with a specific reason · below 3.5 recommend against
+(see Ethical Use in CLAUDE.md).
 
 ### Recommended Next Step
 
@@ -95,15 +118,8 @@ call.` / `Skip — IC scope misalignment.` Do not hedge.
 
 ### Extracted Keywords
 
-Close the report with a simple bulleted list of 15–20 JD keywords (tech,
-methodology, tool names, buzzwords) for ATS optimisation when generating the
-PDF later.
-
-## Story bank
-
-If `config/story-bank.md` exists, silently append 1–2 new STAR+R
-stories from Block B / C observations if they're not already there. This
-keeps the bank growing without cluttering the report itself.
+A simple bulleted list of 15–20 JD keywords (tech, methodology, tool
+names, buzzwords) for ATS optimisation when generating the PDF later.
 
 ## Tracker TSV drop
 
@@ -121,8 +137,13 @@ Score / Report / Notes.
 
 ## Scoring rules
 
-- **Never invent metrics.** Read them from `config/cv.md`.
-- **Cite exact CV lines** when matching.
-- **Use WebSearch sparingly** — one or two queries total across Blocks C + F.
-- **Stay direct.** No corporate-speak in the bullets.
-- **Match the JD language** (EN default). If the JD is in French / German / Japanese and the user has set `language.modes_dir`, switch the report language too.
+Invariants for this pass:
+
+- **Never invent experience or metrics.** Read them from `config/cv.md`
+  and `config/story-bank.md` at evaluation time; cite the exact CV line
+  when matching (see the Block A guidance above).
+- **Zero WebSearch.** This pass never touches the open web. If something
+  can only be known by searching (real comp, layoffs, funding, posting
+  liveness), it is out of scope here — flag it for interview-prep instead.
+- **Match the JD language** (EN default). Generate the report in the JD's
+  language; the mode files themselves stay English.

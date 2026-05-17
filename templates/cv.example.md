@@ -3,7 +3,7 @@
 [your-website.com](https://your-website.com) / [you@example.com](mailto:you@example.com) / [+00 0000000000](tel:+00) / [linkedin.com/in/your-handle](https://www.linkedin.com/in/your-handle/) / City, Country
 
 <!-- Replace the contact line above with yours. The CV generator force-overwrites
-     name + contact from config/profile.yml at render time, so the values here
+     name + contact from config/profile.md at render time, so the values here
      mostly drive what the LLM "sees" when reasoning about you. -->
 
 ## Summary

@@ -1,6 +1,6 @@
 # Mode: analyze — Transcript Analysis
 
-When the user runs `/career-ops analyze --transcript {path} [--company {slug}]`, run this mode. Score a real-interview transcript against the 5-dim rubric, walk the triage priority stack, and emit per-unit findings.
+When the user runs `/career-ops analyze {NUM} {transcript-path}`, run this mode. Score a real-interview transcript against the 5-dim rubric, walk the triage priority stack, and emit per-unit findings.
 
 For mock interviews you've run inside this system, use `mock` (it generates the same kind of analysis built-in). Use this mode for **real interviews** — your own recordings, Otter transcripts, retro notes.
 
@@ -12,16 +12,11 @@ For mock interviews you've run inside this system, use `mock` (it generates the 
 | `modes/_rubrics.md` | ALWAYS | 5-dim score anchors, root cause taxonomy, **triage priority stack** |
 | `modes/_round-types.md` | If transcript declares a round type | Per-round weight shift for the Hire Signal roll-up |
 | `config/story-bank.md` | ALWAYS | Cross-reference stories used; flag overuse / freshness |
-| `data/interview-prep/{company-slug}-*.md` | If `--company` is set AND prep exists | Compare against pre-interview expectations |
+| `data/interview-prep/{NUM}-*.md` | If `--company` is set AND prep exists | Compare against pre-interview expectations |
 | `data/score-history.md` | ALWAYS (append at end; also read to surface trends) | Score log |
 | `data/applications.md` | If `--company` is set | Cross-reference current tracker row |
 
 ## Transcript format
-
-Multi-format auto-detection is **deferred**. v1 accepts:
-- Markdown
-- Plain text
-- Otter / Zoom / Grain export → paste into a `.md` file first
 
 If the transcript has speaker labels, use them. If not, ask the candidate at Step 0 to identify which lines are theirs.
 
@@ -153,7 +148,7 @@ Print the assembled analysis:
 ## Recommendations
 - Drill: {one specific drill type to run in `practice` next, based on triage priority}
 - Bank work: {if gaps surface — "consider adding a story about X" — point to specific question types the bank didn't cover}
-- Active Strategy update: {if a root cause shifts the dominant bottleneck, propose updating `config/_profile.md` Active Strategy section}
+- Active Strategy update: {if a root cause shifts the dominant bottleneck, propose updating `data/active-strategy.md`}
 ```
 
 ## Step 6: State writes

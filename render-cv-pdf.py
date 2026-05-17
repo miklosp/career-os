@@ -12,9 +12,18 @@ Page size is injected at render time based on --format.
 """
 
 import argparse
+import os
 import re
 import sys
 from pathlib import Path
+
+# WeasyPrint needs GLib/Pango which Homebrew installs to /opt/homebrew/lib.
+# macOS doesn't include that path by default, so we add it here.
+_hb_lib = "/opt/homebrew/lib"
+if os.path.isdir(_hb_lib):
+    os.environ["DYLD_LIBRARY_PATH"] = (
+        _hb_lib + (":" + os.environ["DYLD_LIBRARY_PATH"] if os.environ.get("DYLD_LIBRARY_PATH") else "")
+    )
 
 import markdown
 import weasyprint

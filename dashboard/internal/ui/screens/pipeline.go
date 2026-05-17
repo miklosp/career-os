@@ -75,6 +75,16 @@ type PipelineOpenURLMsg struct {
 	URL string
 }
 
+// PipelineApplyMsg is emitted when the user starts the live apply flow for the
+// selected app. When the dashboard runs inside cmux it spawns a new cmux
+// workspace (tab) running an interactive Claude Code session primed with
+// `/career-ops apply` for this row. Outside cmux it degrades to opening the
+// job URL in the host browser.
+type PipelineApplyMsg struct {
+	CareerOpsPath string
+	App           model.CareerApplication
+}
+
 // PipelineLoadReportMsg requests lazy loading of a report summary.
 type PipelineLoadReportMsg struct {
 	CareerOpsPath string
@@ -96,13 +106,6 @@ type PipelineOpenProgressMsg struct{}
 
 // PipelineGenerateCVMsg is emitted when the user requests CV generation for the selected app.
 type PipelineGenerateCVMsg struct {
-	CareerOpsPath string
-	App           model.CareerApplication
-}
-
-// PipelineRescoreMsg is emitted when the user asks to re-run scoring on the selected app.
-// Used to retry Fetched rows and to override a Skipped-Location decision.
-type PipelineRescoreMsg struct {
 	CareerOpsPath string
 	App           model.CareerApplication
 }
@@ -187,11 +190,16 @@ const (
 
 // Filter modes
 const (
+	filterPriority  = "priority"
 	filterFetched   = "fetched"
 	filterEvaluated = "evaluated"
 	filterApplied   = "applied"
 	filterInterview = "interview"
 	filterSkip      = "skip"
+	filterProgress  = "progress"
+
+	// priorityThreshold is the minimum score for the PRIORITY tab.
+	priorityThreshold = 4.0
 )
 
 type pipelineTab struct {
@@ -200,11 +208,13 @@ type pipelineTab struct {
 }
 
 var pipelineTabs = []pipelineTab{
+	{filterPriority, "PRIORITY"},
 	{filterEvaluated, "EVALUATED"},
 	{filterFetched, "FETCHED"},
 	{filterApplied, "APPLIED"},
 	{filterInterview, "INTERVIEW"},
 	{filterSkip, "SKIP"},
+	{filterProgress, "PROGRESS"},
 }
 
 var sortCycle = []string{sortScore, sortDate, sortCompany, sortStatus}
@@ -527,6 +537,10 @@ func (m PipelineModel) handleKey(msg tea.KeyMsg) (PipelineModel, tea.Cmd) {
 		return m, func() tea.Msg { return PipelineClosedMsg{} }
 
 	case "down", "j":
+		if m.onProgressTab() {
+			m.scrollOffset++
+			return m, nil
+		}
 		if len(m.filtered) > 0 {
 			m.cursor++
 			if m.cursor >= len(m.filtered) {
@@ -537,6 +551,12 @@ func (m PipelineModel) handleKey(msg tea.KeyMsg) (PipelineModel, tea.Cmd) {
 		}
 
 	case "up", "k":
+		if m.onProgressTab() {
+			if m.scrollOffset > 0 {
+				m.scrollOffset--
+			}
+			return m, nil
+		}
 		if len(m.filtered) > 0 {
 			m.cursor--
 			if m.cursor < 0 {
@@ -614,8 +634,24 @@ func (m PipelineModel) handleKey(msg tea.KeyMsg) (PipelineModel, tea.Cmd) {
 			}
 		}
 
+	case "a":
+		if app, ok := m.CurrentApp(); ok {
+			path := m.careerOpsPath
+			return m, func() tea.Msg {
+				return PipelineApplyMsg{CareerOpsPath: path, App: app}
+			}
+		}
+
 	case "p":
-		return m, func() tea.Msg { return PipelineOpenProgressMsg{} }
+		for i, tab := range pipelineTabs {
+			if tab.filter == filterProgress {
+				m.activeTab = i
+				break
+			}
+		}
+		m.applyFilterAndSort()
+		m.cursor = 0
+		m.scrollOffset = 0
 
 	case "r":
 		return m, func() tea.Msg { return PipelineRefreshMsg{} }
@@ -651,14 +687,6 @@ func (m PipelineModel) handleKey(msg tea.KeyMsg) (PipelineModel, tea.Cmd) {
 			path := m.careerOpsPath
 			return m, func() tea.Msg {
 				return PipelineGenerateCVMsg{CareerOpsPath: path, App: app}
-			}
-		}
-
-	case "e":
-		if app, ok := m.CurrentApp(); ok {
-			path := m.careerOpsPath
-			return m, func() tea.Msg {
-				return PipelineRescoreMsg{CareerOpsPath: path, App: app}
 			}
 		}
 
@@ -758,6 +786,12 @@ func (m *PipelineModel) applyFilterAndSort() {
 	for _, app := range m.apps {
 		norm := data.NormalizeStatus(app.Status)
 		switch currentFilter {
+		case filterProgress:
+			// Pseudo-tab — opens the progress screen, never lists rows.
+		case filterPriority:
+			if norm == filterEvaluated && app.Score >= priorityThreshold {
+				filtered = append(filtered, app)
+			}
 		case filterSkip:
 			if norm == "skip" || norm == "skipped-location" {
 				filtered = append(filtered, app)
@@ -860,6 +894,25 @@ func (m PipelineModel) cursorLineEstimate() int {
 // View renders the pipeline screen.
 func (m PipelineModel) View() string {
 	tabs := m.renderTabs()
+
+	// PROGRESS tab: analytics rendered inline under the still-visible tab bar.
+	// No preview pane, no footer/help line — just the charts.
+	if m.onProgressTab() {
+		body := m.renderProgressBody()
+		bodyLines := strings.Split(body, "\n")
+		if m.scrollOffset > 0 && m.scrollOffset < len(bodyLines) {
+			bodyLines = bodyLines[m.scrollOffset:]
+		}
+		availHeight := m.height - 3 // tabs(2) + padding
+		if availHeight < 3 {
+			availHeight = 3
+		}
+		if len(bodyLines) > availHeight {
+			bodyLines = bodyLines[:availHeight]
+		}
+		return lipgloss.JoinVertical(lipgloss.Left, tabs, strings.Join(bodyLines, "\n"))
+	}
+
 	body := m.renderBody()
 	preview := m.renderPreview()
 	help := m.renderHelp()
@@ -900,8 +953,10 @@ func (m PipelineModel) renderTabs() string {
 
 	for i, tab := range pipelineTabs {
 		// Count items for this tab
-		count := m.countForFilter(tab.filter)
-		label := fmt.Sprintf(" %s (%d) ", tab.label, count)
+		label := fmt.Sprintf(" %s ", tab.label)
+		if tab.filter != filterProgress {
+			label = fmt.Sprintf(" %s (%d) ", tab.label, m.countForFilter(tab.filter))
+		}
 
 		if i == m.activeTab {
 			style := lipgloss.NewStyle().
@@ -931,11 +986,43 @@ func (m PipelineModel) renderTabs() string {
 	return padStyle.Render(row) + "\n" + padStyle.Render(underline)
 }
 
+// onProgressTab reports whether the PROGRESS pseudo-tab is currently active.
+func (m PipelineModel) onProgressTab() bool {
+	return pipelineTabs[m.activeTab].filter == filterProgress
+}
+
+// renderProgressBody renders the analytics panels inline as the tab body,
+// reusing the progress screen's panel renderers. No header, no footer, no
+// summary — just the funnel/score/rate/weekly charts under the tab bar.
+func (m PipelineModel) renderProgressBody() string {
+	pm := ProgressModel{
+		metrics: data.ComputeProgressMetrics(m.apps),
+		width:   m.width,
+		height:  m.height,
+		theme:   m.theme,
+	}
+	return lipgloss.JoinVertical(lipgloss.Left,
+		pm.renderFunnel(),
+		"",
+		pm.renderScoreDistribution(),
+		"",
+		pm.renderRates(),
+		"",
+		pm.renderWeeklyActivity(),
+	)
+}
+
 func (m PipelineModel) countForFilter(filter string) int {
 	count := 0
 	for _, app := range m.apps {
 		norm := data.NormalizeStatus(app.Status)
 		switch filter {
+		case filterProgress:
+			return 0
+		case filterPriority:
+			if norm == filterEvaluated && app.Score >= priorityThreshold {
+				count++
+			}
 		case filterSkip:
 			if norm == "skip" || norm == "skipped-location" {
 				count++
@@ -1142,12 +1229,11 @@ func (m PipelineModel) renderHelp() string {
 	}
 
 	hintParts := []string{
-		hint("", "o", "pen URL"),
+		hint("", "o", "pen"),
+		hint("", "a", "pply"),
 		hint("", "c", "hange"),
 		hint("", "d", "iscard"),
 		hint("", "g", "enerate CV"),
-		hint("r", "e", "-score"),
-		hint("", "p", "rogress"),
 		hint("", "r", "efresh"),
 	}
 	if fetchedCount := m.metrics.ByStatus["fetched"]; fetchedCount > 0 {

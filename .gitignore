@@ -39,3 +39,12 @@ package-lock.json
 
 # Local env (never commit secrets)
 .env
+
+# Agent Safehouse workdir config (machine-specific absolute paths)
+.safehouse
+
+# Local scratch / research notes (not repo content)
+/ATS.md
+/ATS-review.md
+/location-scope-analysis.md
+/todo.md

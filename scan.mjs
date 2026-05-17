@@ -13,8 +13,28 @@
  * stdout so the invoking Claude session can dispatch one background
  * fetch+gate+score agent per URL (see modes/auto-pipeline.md).
  *
- * On first run, auto-migrates data/scan-history.tsv → SQLite and
- * renames the legacy TSV to .bak-{date}.
+ * The scan-history DB is opened, migrated, and written exclusively
+ * through lib/scan-history.mjs (openScanHistoryDb / recordOffers) —
+ * this script never touches SQLite directly.
+ *
+ * data/scan-history.db schema (single table; URL-level dedupe log):
+ *
+ *   CREATE TABLE offers (
+ *     url        TEXT PRIMARY KEY,   -- LinkedIn rows store linkedin.com/jobs/view/{id}
+ *     first_seen TEXT NOT NULL,      -- YYYY-MM-DD
+ *     portal     TEXT,               -- greenhouse-api | ashby-api | lever-api
+ *                                    -- | linkedin-apify | remoteineurope | websearch — …
+ *     title      TEXT,
+ *     company    TEXT,
+ *     status     TEXT NOT NULL DEFAULT 'added'
+ *                -- added | skipped_title | skipped_dup | skipped_expired
+ *   );
+ *
+ * Insufficient-credit contract: if the LinkedIn level (lib/scan-linkedin.mjs)
+ * detects an exhausted Apify account, this script prints a single line
+ *   SCAN_FATAL=apify-insufficient-credits
+ * BEFORE any DISPATCH_URLS= line. It is non-fatal to the run — Levels 1/2b/3
+ * still execute and their URLs are still dispatched; only LinkedIn is skipped.
  *
  * Usage:
  *   node scan.mjs                  # scan all enabled companies
@@ -22,12 +42,14 @@
  *   node scan.mjs --company Cohere # scan a single company
  */
 
-import { readFileSync, writeFileSync, appendFileSync, existsSync, mkdirSync, renameSync } from 'fs';
+import { readFileSync, writeFileSync, appendFileSync, existsSync, mkdirSync } from 'fs';
 import { resolve } from 'path';
 import yaml from 'js-yaml';
-import Database from 'better-sqlite3';
 import { runLinkedInScan } from './lib/scan-linkedin.mjs';
 import { runRemoteInEuropeScan } from './lib/scan-remoteineurope.mjs';
+import { runHiringCafeScan } from './lib/scan-hiringcafe.mjs';
+import { openScanHistoryDb, loadSeenUrls, recordOffers } from './lib/scan-history.mjs';
+import { isBanned } from './lib/ban-list.mjs';
 const parseYaml = yaml.load;
 
 // Auto-load .env so APIFY_API_TOKEN / FIRECRAWL_API_KEY are available
@@ -54,61 +76,12 @@ loadDotenv();
 
 const PORTALS_PATH = 'config/portals.yml';
 const SCAN_HISTORY_DB_PATH = 'data/scan-history.db';
-const SCAN_HISTORY_TSV_LEGACY = 'data/scan-history.tsv';
 const APPLICATIONS_PATH = 'data/applications.md';
 
 // Ensure required directories exist (fresh setup)
 mkdirSync('data', { recursive: true });
 
-// ── SQLite: open, schema, one-shot TSV migration ────────────────────
-
-function openScanHistoryDb() {
-  const db = new Database(SCAN_HISTORY_DB_PATH);
-  db.pragma('journal_mode = WAL');
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS offers (
-      url        TEXT PRIMARY KEY,
-      first_seen TEXT NOT NULL,
-      portal     TEXT,
-      title      TEXT,
-      company    TEXT,
-      status     TEXT NOT NULL DEFAULT 'added'
-    );
-    CREATE INDEX IF NOT EXISTS idx_offers_first_seen ON offers(first_seen);
-    CREATE INDEX IF NOT EXISTS idx_offers_company    ON offers(company);
-  `);
-
-  // One-shot migration: if DB is empty and legacy TSV exists, import it.
-  const { n } = db.prepare('SELECT COUNT(*) AS n FROM offers').get();
-  if (n === 0 && existsSync(SCAN_HISTORY_TSV_LEGACY)) {
-    const lines = readFileSync(SCAN_HISTORY_TSV_LEGACY, 'utf-8').split('\n');
-    const insert = db.prepare(
-      `INSERT OR IGNORE INTO offers (url, first_seen, portal, title, company, status)
-       VALUES (@url, @first_seen, @portal, @title, @company, @status)`
-    );
-    const tx = db.transaction(rows => { for (const r of rows) insert.run(r); });
-    const rows = [];
-    for (const line of lines.slice(1)) { // skip header
-      const f = line.split('\t');
-      if (!f[0] || f[0] === 'url') continue;
-      rows.push({
-        url: f[0],
-        first_seen: f[1] || new Date().toISOString().slice(0, 10),
-        portal: f[2] || null,
-        title: f[3] || null,
-        company: f[4] || null,
-        status: f[5] || 'added',
-      });
-    }
-    tx(rows);
-    const bak = `${SCAN_HISTORY_TSV_LEGACY}.bak-${new Date().toISOString().slice(0, 10)}`;
-    renameSync(SCAN_HISTORY_TSV_LEGACY, bak);
-    console.log(`📦 Migrated ${rows.length} rows from ${SCAN_HISTORY_TSV_LEGACY} → ${SCAN_HISTORY_DB_PATH}`);
-    console.log(`   Legacy TSV preserved at ${bak}`);
-  }
-
-  return db;
-}
+// ── Fetch tuning ────────────────────────────────────────────────────
 
 const CONCURRENCY = 10;
 const FETCH_TIMEOUT_MS = 10_000;
@@ -217,25 +190,6 @@ function buildTitleFilter(titleFilter) {
 
 // ── Dedup ───────────────────────────────────────────────────────────
 
-function loadSeenUrls(db) {
-  const seen = new Set();
-
-  // scan-history.db
-  for (const row of db.prepare('SELECT url FROM offers').all()) {
-    seen.add(row.url);
-  }
-
-  // applications.md — extract URLs from report links and any inline URLs
-  if (existsSync(APPLICATIONS_PATH)) {
-    const text = readFileSync(APPLICATIONS_PATH, 'utf-8');
-    for (const match of text.matchAll(/https?:\/\/[^\s|)]+/g)) {
-      seen.add(match[0]);
-    }
-  }
-
-  return seen;
-}
-
 function loadSeenCompanyRoles() {
   const seen = new Set();
   if (existsSync(APPLICATIONS_PATH)) {
@@ -253,19 +207,6 @@ function loadSeenCompanyRoles() {
 }
 
 // ── Writers ─────────────────────────────────────────────────────────
-
-function insertNewOffers(db, offers, date) {
-  const stmt = db.prepare(
-    `INSERT OR IGNORE INTO offers (url, first_seen, portal, title, company, status)
-     VALUES (?, ?, ?, ?, ?, 'added')`
-  );
-  const tx = db.transaction(items => {
-    for (const o of items) {
-      stmt.run(o.url, date, o.source, o.title, o.company);
-    }
-  });
-  tx(offers);
-}
 
 // ── Parallel fetch with concurrency limit ───────────────────────────
 
@@ -303,20 +244,22 @@ async function main() {
   const companies = config.tracked_companies || [];
   const titleFilter = buildTitleFilter(config.title_filter);
 
-  // 2. Filter to enabled companies with detectable APIs
-  const targets = companies
-    .filter(c => c.enabled !== false)
+  // 2. Filter to enabled, non-banned companies with detectable APIs
+  const enabled = companies.filter(c => c.enabled !== false);
+  const notBanned = enabled.filter(c => !isBanned({ company: c.name, url: c.careers_url || '' }));
+  let bannedSkipped = enabled.length - notBanned.length;
+  const targets = notBanned
     .filter(c => !filterCompany || c.name.toLowerCase().includes(filterCompany))
     .map(c => ({ ...c, _api: detectApi(c) }))
     .filter(c => c._api !== null);
 
-  const skippedCount = companies.filter(c => c.enabled !== false).length - targets.length;
+  const skippedCount = notBanned.length - targets.length;
 
   console.log(`Scanning ${targets.length} companies via API (${skippedCount} skipped — no API detected)`);
   if (dryRun) console.log('(dry run — no files will be written)\n');
 
   // 3. Open DB + load dedup sets
-  const db = openScanHistoryDb();
+  const db = openScanHistoryDb({ dryRun });
   const seenUrls = loadSeenUrls(db);
   const seenCompanyRoles = loadSeenCompanyRoles();
 
@@ -338,6 +281,10 @@ async function main() {
       for (const job of jobs) {
         if (!titleFilter(job.title)) {
           totalFiltered++;
+          continue;
+        }
+        if (isBanned({ url: job.url, company: job.company })) {
+          bannedSkipped++;
           continue;
         }
         if (seenUrls.has(job.url)) {
@@ -363,7 +310,7 @@ async function main() {
 
   // 5. Write results
   if (!dryRun && newOffers.length > 0) {
-    insertNewOffers(db, newOffers, date);
+    recordOffers(db, newOffers.map(o => ({ url: o.url, title: o.title, company: o.company, portal: o.source })), { firstSeen: date });
   }
 
   // 5b. LinkedIn — Apify-based discovery + per-JD detail prefetch.
@@ -411,6 +358,25 @@ async function main() {
     errors.push({ company: 'remoteineurope.com', error: err.message });
   }
 
+  // 5d. hiring.cafe — SSR __NEXT_DATA__ scrape, free, no Apify. Federates
+  // thousands of employer ATSes; the helper returns resolved employer ATS
+  // URLs (Greenhouse / Ashby / Lever / Workable / …), which auto-pipeline
+  // agents fetch+gate+score normally. Driven by hiringcafe_searches in
+  // portals.yml; the global title_filter does the precise include/exclude.
+  let hcUrls = [];
+  let hcStats = null;
+  try {
+    const result = await runHiringCafeScan({
+      db,
+      portalsCfg: config,
+      dryRun,
+    });
+    hcUrls = result.newUrls;
+    hcStats = result.stats;
+  } catch (err) {
+    errors.push({ company: 'hiring.cafe', error: err.message });
+  }
+
   // 6. Print summary
   console.log(`\n${'━'.repeat(45)}`);
   console.log(`Portal Scan — ${date}`);
@@ -419,6 +385,7 @@ async function main() {
   console.log(`Total jobs found:      ${totalFound}`);
   console.log(`Filtered by title:     ${totalFiltered} removed`);
   console.log(`Duplicates:            ${totalDupes} skipped`);
+  console.log(`Banned skipped:        ${bannedSkipped}`);
   console.log(`New offers added:      ${newOffers.length}`);
 
   if (errors.length > 0) {
@@ -433,14 +400,31 @@ async function main() {
     console.log(`LinkedIn (Apify):      ${linkedinStats.searches} searches, ${linkedinStats.idsReturned} ids, ${linkedinStats.afterTitleFilter} after title filter`);
     console.log(`  Prefetched JDs:      ${linkedinStats.prefetched}`);
     console.log(`  Skipped (title):     ${linkedinStats.skipped}`);
+    console.log(`  Banned skipped:      ${linkedinStats.banned ?? 0}`);
+    if (linkedinStats.fatal === 'apify-insufficient-credits') {
+      console.log('');
+      console.log(`  ⚠ LinkedIn level SKIPPED — Apify account out of credits${linkedinStats.fatalDetail ? ` (${linkedinStats.fatalDetail})` : ''}.`);
+      console.log('    Top up at https://console.apify.com/billing or narrow datePosted. Other levels ran normally.');
+    }
   }
   if (rieStats) {
     console.log(`remoteineurope:        ${rieStats.sitemapJobs} in sitemap, ${rieStats.alreadySeen} already seen, ${rieStats.fetched} fetched, ${rieStats.failed} failed`);
     console.log(`  Skipped (title):     ${rieStats.skippedTitle}`);
+    console.log(`  Banned skipped:      ${rieStats.banned ?? 0}`);
     console.log(`  New dispatchable:    ${rieStats.dispatched}`);
   }
+  if (hcStats) {
+    console.log(`hiring.cafe:           ${hcStats.searches} searches, ${hcStats.seen} hits scanned, ${hcStats.alreadySeen} already seen, ${hcStats.failed} failed`);
+    console.log(`  Expired skipped:     ${hcStats.expired}`);
+    console.log(`  Skipped (title):     ${hcStats.skippedTitle}`);
+    console.log(`  Banned skipped:      ${hcStats.banned ?? 0}`);
+    console.log(`  New dispatchable:    ${hcStats.dispatched}`);
+  }
 
-  const dispatchUrls = [...newOffers.map(o => o.url), ...linkedinUrls, ...rieUrls];
+  // Backstop: nothing banned reaches DISPATCH_URLS even if an upstream
+  // (LinkedIn/remoteineurope) helper missed it.
+  const dispatchUrls = [...newOffers.map(o => o.url), ...linkedinUrls, ...rieUrls, ...hcUrls]
+    .filter(u => !isBanned({ url: u }));
 
   if (newOffers.length > 0) {
     console.log('\nNew offers (Level 1 ATS APIs):');
@@ -459,6 +443,18 @@ async function main() {
     for (const url of rieUrls) {
       console.log(`  + ${url}`);
     }
+  }
+  if (hcUrls.length > 0) {
+    console.log('\nNew offers (hiring.cafe — resolved employer ATS URLs):');
+    for (const url of hcUrls) {
+      console.log(`  + ${url}`);
+    }
+  }
+
+  // Machine-readable fatal marker — ALWAYS printed before DISPATCH_URLS so the
+  // orchestrator can deterministically detect the credit-exhaustion case.
+  if (linkedinStats?.fatal === 'apify-insufficient-credits') {
+    console.log('\nSCAN_FATAL=apify-insufficient-credits');
   }
 
   if (dispatchUrls.length > 0) {

@@ -676,26 +676,77 @@ func UpdateApplicationStatus(careerOpsPath string, app model.CareerApplication, 
 		if !strings.HasPrefix(strings.TrimSpace(line), "|") {
 			continue
 		}
-		// Match by report number
-		if app.ReportNumber != "" && strings.Contains(line, fmt.Sprintf("[%s]", app.ReportNumber)) {
-			// Replace the status field
-			lines[i] = replaceStatusInLine(line, app.Status, newStatus)
-			found = true
-			break
+		if !rowMatches(line, app) {
+			continue
 		}
+		updated, ok := setStatusCell(line, newStatus)
+		if !ok {
+			return fmt.Errorf("malformed tracker row for #%d: cannot locate status cell", app.Number)
+		}
+		lines[i] = updated
+		found = true
+		break
 	}
 
 	if !found {
-		return fmt.Errorf("application not found: report %s", app.ReportNumber)
+		return fmt.Errorf("application not found: #%d (report %q)", app.Number, app.ReportNumber)
 	}
 
 	return os.WriteFile(filePath, []byte(strings.Join(lines, "\n")), 0644)
 }
 
-// replaceStatusInLine replaces the old status with new status in a table line.
-func replaceStatusInLine(line, oldStatus, newStatus string) string {
-	// Case-insensitive replacement of the status field
-	return strings.Replace(line, oldStatus, newStatus, 1)
+// trackerCells splits a pipe-delimited tracker row into its raw cells.
+// For a row like "| 431 | ... | notes |" the result is:
+// index 0 = "" (before leading pipe), 1 = Number, 2 = Date, 3 = Company,
+// 4 = Role, 5 = Score, 6 = Status, 7 = PDF, 8 = Report, 9 = Notes,
+// 10 = "" (after trailing pipe). Whitespace inside each cell is preserved.
+func trackerCells(line string) []string {
+	return strings.Split(line, "|")
+}
+
+const statusCellIndex = 6
+
+// rowMatches reports whether a tracker row identifies the given application.
+// The tracker number (column 1) is the stable primary key and is always
+// present; the report number is only a legacy fallback for rows whose number
+// could not be parsed.
+func rowMatches(line string, app model.CareerApplication) bool {
+	cells := trackerCells(line)
+	if len(cells) <= statusCellIndex {
+		return false
+	}
+	if app.Number > 0 {
+		if n, err := strconv.Atoi(strings.TrimSpace(cells[1])); err == nil {
+			return n == app.Number
+		}
+	}
+	if app.ReportNumber != "" {
+		return strings.Contains(line, fmt.Sprintf("[%s]", app.ReportNumber))
+	}
+	return false
+}
+
+// setStatusCell rewrites only the status cell of a tracker row, preserving the
+// cell's surrounding whitespace so the table stays aligned. It never touches
+// any other column, so status-like text in the company, role, or notes cells
+// cannot be corrupted. Returns false if the row has no status cell.
+func setStatusCell(line, newStatus string) (string, bool) {
+	cells := trackerCells(line)
+	if len(cells) <= statusCellIndex {
+		return line, false
+	}
+	old := cells[statusCellIndex]
+	trimmed := strings.TrimSpace(old)
+	lead := old[:strings.Index(old, trimmed)]
+	if trimmed == "" {
+		// Empty status cell: keep one space of padding on each side.
+		lead = " "
+		cells[statusCellIndex] = lead + newStatus + " "
+		return strings.Join(cells, "|"), true
+	}
+	trail := old[strings.Index(old, trimmed)+len(trimmed):]
+	cells[statusCellIndex] = lead + newStatus + trail
+	return strings.Join(cells, "|"), true
 }
 
 // cleanTableCell removes trailing pipes and whitespace from a table cell value.

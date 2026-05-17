@@ -1,6 +1,6 @@
 # Mode: mock — Full Simulated Interview
 
-When the user runs `/career-ops mock [--company {slug}] [--round-type ...] [--length ...]`, run this mode. The coach plays the interviewer in character for one full round — 3 to 7 questions, no mid-mock scoring, post-mock debrief at the end.
+When the user runs `/career-ops mock {NUM} [--round-type ...] [--length ...]`, run this mode. The coach plays the interviewer in character for one full round — 3 to 7 questions, no mid-mock scoring, post-mock debrief at the end.
 
 For focused drilling on one weakness, use `practice`. For analyzing a real transcript, use `analyze`.
 
@@ -11,9 +11,10 @@ For focused drilling on one weakness, use `practice`. For analyzing a real trans
 | `modes/_rubrics.md` | ALWAYS | 5-dim score anchors, Hire Signal criteria |
 | `modes/_round-types.md` | ALWAYS | Per-round character, weight shifts, question themes |
 | `config/story-bank.md` | ALWAYS | Story content for the post-mock debrief; freshness/overuse signals |
-| `data/interview-prep/{company-slug}-*.md` | If `--company` is set AND a prep artifact exists | Company-specific questions and intel |
+| `data/interview-prep/{NUM}-*.md` | If `{NUM}` is set AND a prep artifact exists | Company-specific questions and intel |
 | `data/score-history.md` | ALWAYS (append at end) | Mock score log |
-| `config/_profile.md` | ALWAYS | Seniority band; Active Strategy |
+| `config/profile.md` | ALWAYS | Seniority band (Target Roles & Archetypes) |
+| `data/active-strategy.md` | ALWAYS | Active Strategy / current bottleneck |
 | `data/applications.md` | If `--company` is set | Cross-reference current Interview status for that company |
 
 ## Flags

@@ -7,12 +7,9 @@ Template files used by career-ops scripts and modes. User-specific customization
 | File | Used By | Purpose |
 |------|---------|---------|
 | `cv.example.md` | Onboarding | Skeleton CV — copy to `config/cv.md` and fill in |
-| `profile.example.yml` | Onboarding | Example candidate profile (copy to `config/profile.yml` and fill in) |
-| `_profile.template.md` | Onboarding | Template for `config/_profile.md` user customization file |
+| `profile.example.md` | Onboarding | Example candidate profile — frontmatter (identity, location policy, tooling) + markdown body (archetypes, narrative, voice, scoring). Copy to `config/profile.md` and fill in. |
 | `portals.example.yml` | Onboarding | Example portal scanner configuration (copy to `config/portals.yml` to activate) |
 | `story-bank.example.md` | Onboarding | Empty STAR+R story bank — copy to `config/story-bank.md`; evaluations append here |
-| `ats-prompt.example.md` | `lib/generate-cv-llm.mjs` | LLM prompt for the CV generator — copy to `config/ats-prompt.md` and customize the candidate-context paragraph |
-| `cv-review-prompt.example.md` | `lib/cv-fact-check.mjs` | Fact-checker prompt — copy to `config/cv-review-prompt.md` (fully generic, no edits needed) |
 | `states.yml` | `lib/verify-pipeline.mjs`, `lib/normalize-statuses.mjs`, `merge-tracker.mjs` | Canonical application states and aliases |
 
 ### portals.example.yml
@@ -21,15 +18,11 @@ Pre-configured scanner with 45+ tracked companies and search queries. Title filt
 
 **To activate:** `cp templates/portals.example.yml config/portals.yml` and customize `title_filter.positive` for your target roles.
 
-### profile.example.yml
+### profile.example.md
 
-Example `config/profile.yml` with all fields: candidate identity, target roles, archetypes, narrative, compensation, location (+ `location_policy` for the skip gate).
+Single source of truth for personal data. **YAML frontmatter** carries the structured contracts the system parses (`candidate` → CV identity header, `location_policy` → skip gate, `tooling` → dashboard apply launcher). The **markdown body** carries everything LLM modes read as prose: archetypes, adaptive framing, exit narrative, voice & branding, comp anchor, scoring adjustments. Coaching session state lives separately in `data/active-strategy.md`.
 
-**To activate:** `cp templates/profile.example.yml config/profile.yml` and fill in your details.
-
-### _profile.template.md
-
-Example `config/_profile.md` — archetype framing, narrative, negotiation scripts. Copied in silently on first run if missing.
+**To activate:** `cp templates/profile.example.md config/profile.md` and fill in your details.
 
 ### cv.example.md
 
@@ -39,13 +32,7 @@ Skeleton CV with placeholder sections (Summary, Core Competencies, Experience, E
 
 Empty STAR+R story bank with the format guide. **To activate:** `cp templates/story-bank.example.md config/story-bank.md`. Evaluations (Block F of `/career-ops`) append new stories under `## Stories` automatically.
 
-### ats-prompt.example.md
-
-LLM prompt that drives `lib/generate-cv-llm.mjs`. **To activate:** `cp templates/ats-prompt.example.md config/ats-prompt.md` and customize the "Context About the Candidate" paragraph + Rule 8 (Consultancy Framing) to fit your situation. The script reads `config/ats-prompt.md` directly at run time.
-
-### cv-review-prompt.example.md
-
-LLM prompt for the independent fact-checker (`lib/cv-fact-check.mjs`). Fully generic — no per-user edits needed. **To activate:** `cp templates/cv-review-prompt.example.md config/cv-review-prompt.md`.
+> **Note:** the CV-generator and fact-checker prompts are *not* templates. They are generic system prompts that ship ready-to-run at `lib/prompts/ats-prompt.md` and `lib/prompts/cv-review-prompt.md`, read directly by `lib/generate-cv-llm.mjs` / `lib/cv-fact-check.mjs`. No copy step; candidate specifics are injected at run time from `config/cv.md`, `config/profile.md`, the evaluation report, and `config/story-bank.md`.
 
 ### states.yml
 

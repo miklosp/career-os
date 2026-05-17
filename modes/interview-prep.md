@@ -8,7 +8,7 @@ When the user asks to prep for an interview at a specific company+role, or when 
 2. **Evaluation report** in `data/reports/` (if exists) — read for archetype, gaps, matched proof points
 3. **Story bank** at `config/story-bank.md` — read for existing prepared stories
 4. **CV** at `config/cv.md` — read for proof points
-5. **Profile** at `config/profile.yml` + `config/_profile.md` — read for candidate context
+5. **Profile** at `config/profile.md` — read for candidate context
 
 ## Step 1 — Research
 
@@ -74,7 +74,7 @@ Questions tied to the specific job description (archetype-aware).
 For each: the question, why they're likely asking it (what JD requirement it maps to), and the candidate's best angle.
 
 ### Background Red Flags
-Questions the interviewer will probably ask about gaps, transitions, or unusual elements in the candidate's background. Read `config/_profile.md` and `config/cv.md` to identify what might raise questions.
+Questions the interviewer will probably ask about gaps, transitions, or unusual elements in the candidate's background. Read `config/profile.md` and `config/cv.md` to identify what might raise questions.
 For each: the likely question, why it comes up, and a recommended framing (honest, specific, forward-looking — never defensive).
 
 ## Step 5 — Story Bank Mapping
@@ -112,9 +112,35 @@ Things to say, do, and avoid based on research:
 - **Things to avoid:** specific anti-patterns flagged in interview reviews
 - **Questions to ask them:** 2-3 sharp questions that demonstrate you've researched the company, tied to recent news or blog posts discovered in Step 1
 
+## Step 8 — Compensation & Negotiation
+
+Triage (`modes/_eval.md`) deliberately skips comp — it lands here, once a
+role is real enough to interview for. Pull together:
+
+- **The candidate's comp anchor** from `config/profile.md` → **Comp Anchor**
+  (target range, walk-away floor, equity stance). This is the anchor — never
+  invent numbers. There is no stored negotiation script: derive the opening
+  move from the Comp Anchor plus `config/profile.md` → **Voice & Branding**.
+- **Market data** from Step 1: any comp figures or negotiation notes
+  surfaced in the Glassdoor / Blind / Levels searches. Cite the source
+  and date for every figure; label anything inferred as `[inferred]`.
+- **The JD's stated range** if present (jurisdiction may mandate it).
+
+```markdown
+## Compensation & Negotiation
+- **Candidate target:** {range from profile.md Comp Anchor} (floor: {walk-away})
+- **Market signal:** {range} — [source, date] / "no reliable data found"
+- **Posted range:** {JD range or "not disclosed"}
+- **Gap / leverage:** {one or two sentences — where the candidate sits vs. market, what strengthens the ask}
+- **Opening move:** {derived from the Comp Anchor + Voice & Branding, tailored to this company}
+```
+
+If no reliable market data exists, say so plainly and fall back to the
+candidate's own targets — do not fabricate a benchmark.
+
 ## Output
 
-Save the full report to `output/interview-prep/{company-slug}-{role-slug}.md` with this header:
+Save the full report to `output/interview-prep/{NUM}-{company-slug}-{role-slug}.md` with this header:
 
 ```markdown
 # Interview Intel: {Company} — {Role}

@@ -1,13 +1,16 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -380,33 +383,6 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, pcmd
 
-	case screens.PipelineRescoreMsg:
-		// Re-score the highlighted row. Use case: a Fetched row that never
-		// got picked up, or a Skipped-Location the user wants to override.
-		// Launches a background Sonnet agent against the saved JD file via
-		// modes/_location-gate.md + modes/_eval.md — same path as auto-pipeline.
-		num := msg.App.ReportNumber
-		if num == "" {
-			num = reportNum(msg.App.ReportPath)
-		}
-		if num == "" {
-			return m, nil
-		}
-		jdFile := findJDFileByNum(msg.CareerOpsPath, num)
-		if jdFile == "" {
-			return m, nil
-		}
-		careerOpsPath := msg.CareerOpsPath
-		return m, func() tea.Msg {
-			prompt := "Re-run modes/_location-gate.md then modes/_eval.md on " + jdFile + ". Write the report to data/reports/ and drop a TSV in data/tracker-additions/."
-			cmd := exec.Command("claude", "-p",
-				"--model", "claude-sonnet-4-6",
-				"--dangerously-skip-permissions", prompt)
-			cmd.Dir = careerOpsPath
-			_ = cmd.Start()
-			return nil
-		}
-
 	case screens.PipelineMergeMsg:
 		// Run `node merge-tracker.mjs` synchronously to fold pending TSVs
 		// into applications.md, then trigger a full pipeline refresh so the
@@ -422,6 +398,14 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case screens.PipelineOpenURLMsg:
 		url := msg.URL
 		return m, func() tea.Msg {
+			// Inside a reachable cmux workspace, open the link in the cmux
+			// browser surface instead of the host OS browser.
+			if cmuxBin, ok := cmuxReachable(); ok {
+				if err := exec.Command(cmuxBin, "browser", "open", url).Run(); err == nil {
+					return nil
+				}
+				// fall through to the host opener on failure
+			}
 			var cmd *exec.Cmd
 			switch runtime.GOOS {
 			case "darwin":
@@ -432,6 +416,111 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				cmd = exec.Command("cmd", "/c", "start", "", url)
 			default:
 				cmd = exec.Command("xdg-open", url)
+			}
+			_ = cmd.Run()
+			return nil
+		}
+
+	case screens.PipelineApplyMsg:
+		app := msg.App
+		careerOpsPath := msg.CareerOpsPath
+		return m, func() tea.Msg {
+			// Primed initial prompt for the interactive Claude Code session.
+			// The slash command must lead; apply.md handles the rest (its
+			// Step 1 cmux path opens the form itself).
+			var b strings.Builder
+			fmt.Fprintf(&b, "/career-ops apply — application #%d: %s — %s.",
+				app.Number, app.Company, app.Role)
+			if app.ReportNumber != "" {
+				fmt.Fprintf(&b, " Report: data/reports/%s-*.md.", app.ReportNumber)
+			}
+			if app.JobURL != "" {
+				fmt.Fprintf(&b, " Form URL: %s", app.JobURL)
+			}
+			prompt := b.String()
+
+			// Inside a reachable cmux: spawn a new workspace (tab) running
+			// an interactive, primed Claude Code session in the repo.
+			//
+			// The launcher token comes from applyLauncher() (env →
+			// profile.md → "claude") and is run through an interactive
+			// shell (`$SHELL -ic`) so ~/.zshrc is sourced and the user's
+			// `claude()` function (→ `safe claude
+			// --dangerously-skip-permissions …` Agent Safehouse wrapper)
+			// applies. Shell functions/aliases never survive a
+			// non-interactive `sh -c`, so the interactive shell wrap is
+			// load-bearing.
+			//
+			// Sandbox bridge: Safehouse deny-by-default blocks the cmux
+			// Unix socket (~/Library/Application Support/cmux/, denied
+			// path) and strips CMUX_* env, so a sandboxed apply session
+			// can't drive cmux. This dashboard runs unsandboxed inside
+			// cmux, so its OWN env carries the full CMUX_* set + the
+			// socket path — pass them down via Safehouse's env-equivalent
+			// knobs (SAFEHOUSE_ENV_PASS / SAFEHOUSE_ADD_DIRS). The user's
+			// `safe` wrapper honours them; a plain unsandboxed launcher
+			// ignores them. No hardcoded paths, future-proof to new
+			// CMUX_* vars.
+			if cmuxBin, ok := cmuxReachable(); ok {
+				title := "Apply · " + app.Company
+				launcher := applyLauncher(careerOpsPath)
+				shell := os.Getenv("SHELL")
+				if shell == "" {
+					shell = "/bin/zsh"
+				}
+
+				// Collect every CMUX_* name from our own (unsandboxed)
+				// environment so the wrapped session can re-create the
+				// caller context cmux needs for socket + workspace target.
+				var cmuxNames []string
+				for _, kv := range os.Environ() {
+					if strings.HasPrefix(kv, "CMUX_") {
+						if i := strings.IndexByte(kv, '='); i > 0 {
+							cmuxNames = append(cmuxNames, kv[:i])
+						}
+					}
+				}
+				sockDir := ""
+				if sp := os.Getenv("CMUX_SOCKET_PATH"); sp != "" {
+					sockDir = filepath.Dir(sp)
+				} else if home, err := os.UserHomeDir(); err == nil {
+					sockDir = filepath.Join(home, "Library", "Application Support", "cmux")
+				}
+				var sbPrefix string
+				if len(cmuxNames) > 0 {
+					sbPrefix += "SAFEHOUSE_ENV_PASS=" + shellQuote(strings.Join(cmuxNames, ",")) + " "
+				}
+				if sockDir != "" {
+					sbPrefix += "SAFEHOUSE_ADD_DIRS=" + shellQuote(sockDir) + " "
+				}
+
+				inner := launcher + " " + shellQuote(prompt)
+				launch := sbPrefix + shell + " -ic " + shellQuote(inner)
+				c := exec.Command(cmuxBin, "new-workspace",
+					"--name", title,
+					"--cwd", careerOpsPath,
+					"--command", launch,
+					"--focus", "true")
+				if err := c.Run(); err == nil {
+					return nil
+				}
+				// fall through to host-browser degrade on failure
+			}
+
+			// Not in cmux (or spawn failed): degrade to opening the job
+			// URL in the host browser — the user runs /career-ops apply
+			// manually from a terminal in the repo.
+			if app.JobURL == "" {
+				return nil
+			}
+			var cmd *exec.Cmd
+			switch runtime.GOOS {
+			case "darwin":
+				cmd = exec.Command("open", app.JobURL)
+			case "windows":
+				cmd = exec.Command("cmd", "/c", "start", "", app.JobURL)
+			default:
+				cmd = exec.Command("xdg-open", app.JobURL)
 			}
 			_ = cmd.Run()
 			return nil
@@ -532,6 +621,61 @@ func findJDFileByNum(careerOpsPath, num string) string {
 		}
 	}
 	return ""
+}
+
+// reApplyAgent extracts a top-of-line `apply_agent:` scalar from the
+// config/profile.md frontmatter (commented lines start with `#` so they don't
+// match; the regex is line-anchored so the YAML frontmatter block is enough).
+// Dependency-free, in
+// the same targeted-regex style as internal/data/career.go.
+var reApplyAgent = regexp.MustCompile(`(?m)^[ \t]*apply_agent:[ \t]*["']?([^"'#\n]+?)["']?[ \t]*(?:#.*)?$`)
+
+// applyLauncher resolves the coding-agent command the dashboard launches for
+// the interactive apply flow. Precedence: $CAREER_OPS_APPLY_CMD (one-off
+// override) → config/profile.md `tooling.apply_agent` → "claude". The value
+// is a launcher token/command, not a path: it is run through `$SHELL -ic`, so
+// shell functions/aliases (e.g. a sandbox wrapper) still resolve. Note this
+// swaps only the launcher; the primed prompt stays `/career-ops apply …`,
+// which assumes a Claude-Code-style agent that resolves that slash command.
+func applyLauncher(careerOpsPath string) string {
+	if v := strings.TrimSpace(os.Getenv("CAREER_OPS_APPLY_CMD")); v != "" {
+		return v
+	}
+	if b, err := os.ReadFile(filepath.Join(careerOpsPath, "config", "profile.md")); err == nil {
+		if m := reApplyAgent.FindSubmatch(b); m != nil {
+			if v := strings.TrimSpace(string(m[1])); v != "" {
+				return v
+			}
+		}
+	}
+	return "claude"
+}
+
+// cmuxReachable reports whether this process can actually drive cmux, and
+// returns the resolved cmux binary path. This is a capability probe, not an
+// env-var check: the CMUX_* environment is stripped by the `safe` sandbox and
+// the control socket path can be denied by sandbox policy, so a successful
+// `cmux current-workspace` round-trip is the only trustworthy signal that
+// `cmux browser open` / `cmux new-workspace` will work. The 3s timeout keeps
+// a wedged socket from freezing the TUI.
+func cmuxReachable() (string, bool) {
+	bin, err := exec.LookPath("cmux")
+	if err != nil {
+		return "", false
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	if err := exec.CommandContext(ctx, bin, "current-workspace").Run(); err != nil {
+		return "", false
+	}
+	return bin, true
+}
+
+// shellQuote wraps s in POSIX single quotes so it survives as one argument
+// when cmux runs `--command` through a shell. Single quotes inside s are
+// escaped via the standard '\'' idiom.
+func shellQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
 func main() {

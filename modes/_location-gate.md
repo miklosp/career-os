@@ -11,21 +11,21 @@ when a role can't work geographically, skip it with the evidence quoted.
 
 ## Step 1 — Load policy
 
-Read `config/profile.yml` → `location_policy` block. If the block is missing:
+Read `config/profile.md` frontmatter → `location_policy` block. If the block is missing:
 
-- Log one warning: `location_policy missing from config/profile.yml — gate disabled, everything passes`.
+- Log one warning: `location_policy missing from config/profile.md — gate disabled, everything passes`.
 - Return `ALLOW`.
 
 If present, pull these fields (with defaults in case of partial config):
 
 | Field | Used by rule(s) |
 |-------|-----------------|
-| `home_country` | rules 1, 2 |
+| `home_country` | rules 1, 2, 6 |
 | `home_timezone` | rule 5 |
 | `timezone_tolerance_hours` (default 1) | rule 5 |
 | `us_work_authorization` (default true) | rule 3 |
 | `relocation_open` (default false) | rule 4 |
-| `remote_allowed_scopes` (default `[home_country]`) | rule 1 |
+| `remote_allowed_scopes` (default `[home_country]`) | rules 1, 6 |
 | `skip_on` (list of rule ids) | which rules are enabled |
 
 ## Step 2 — Read the JD header
@@ -87,6 +87,27 @@ Examples with `home_timezone: CET` and `timezone_tolerance_hours: 1`:
 - `"Any US timezone"` → PST/MST/CST/EST, range CET-9 to CET-6 → SKIP
 - `"Americas timezones"` → SKIP
 - `unspecified` → pass (no evidence to act on)
+
+### Rule 6: `residency_required_outside_home_country`
+
+Fail if the JD **explicitly and as a hard requirement** restricts employment to people who reside in / are based in / hold local work authorization for a *specific named country* that is NOT `home_country` and NOT covered by `remote_allowed_scopes`.
+
+This catches roles that are remote-on-paper (`Remote scope` may be `unspecified` or `full-remote-region:unspecified`) but legally gated to a single non-home country — Rules 1 and 2 miss these because there is no restricted remote-country *list* and no `onsite:` prefix.
+
+**Triggers (hard, explicit residency/eligibility language):**
+
+- "must currently reside in {country}", "candidates must be located in {country}", "based in {country}" (as a requirement, not a preference)
+- "must have the legal right to work in {country}" / "local work authorization in {country} required" / "must be a {country} resident", where {country} ≠ home and ∉ allowed scopes
+- "{country}-based candidates only", "this role is open to residents of {country}"
+
+**Does NOT trigger (stays ALLOW — soft signal, handled in Block C):**
+
+- Soft preference phrasing: "ideally based in {country}", "{country} preferred", "nice to have: located in {region}"
+- A named office city with hybrid/flexible remote and no residency requirement (that is Rule 2 territory only if `onsite:`)
+- {country} (or a region containing it) is in `remote_allowed_scopes` (e.g. "based anywhere in the EU" with `EU` allowed → pass)
+- Any residency language that is vague or aspirational rather than a stated requirement — **never skip on ambiguity**
+
+Evidence: quote the exact JD sentence stating the residency/eligibility requirement.
 
 ## Step 4 — Emit the verdict
 

@@ -1,0 +1,5 @@
+{
+  "version": 1,
+  "_note": "Learned host\u2192handler map for lib/fetch-jd.mjs. Machine-grown via `node lib/fetch-jd.mjs --learn ...`, NOT hand-edited by the user. Committed on purpose: it is accumulated fetch wisdom that should pass to whoever picks this up next, not per-user state. Each entry maps an otherwise-unrecognised host (or regex) to one of the built-in handlers in fetch-jd.mjs, plus any params the handler can.t pull from the URL (e.g. an org/tenant slug). Consulted before the built-in URL matchers.",
+  "entries": []
+}

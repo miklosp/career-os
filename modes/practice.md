@@ -13,7 +13,8 @@ This mode is for **focused drilling** — one weakness at a time. For a full sim
 | `config/story-bank.md` | ALWAYS | Story content for `--story` flag; story freshness/overuse signals |
 | `data/revisit-queue.md` | ALWAYS (read at session start) | Active root causes to drill against |
 | `data/score-history.md` | ALWAYS (append at session end) | Score log |
-| `config/_profile.md` | ALWAYS | Seniority band, current Active Strategy |
+| `config/profile.md` | ALWAYS | Seniority band (Target Roles & Archetypes) |
+| `data/active-strategy.md` | ALWAYS (read at session start) | Current Active Strategy / bottleneck |
 
 Do NOT read `config/cv.md` or evaluation reports. Drills are about delivery, not job fit.
 
@@ -43,7 +44,7 @@ Read `data/revisit-queue.md`. If any root causes are active, surface them at the
 
 Wait for input. The candidate can pick a focus or just say "general."
 
-Read `config/_profile.md` for Active Strategy. If a current bottleneck is set, frame the session around it:
+Read `data/active-strategy.md` for Active Strategy. If a current bottleneck is set, frame the session around it:
 
 > "Active Strategy is targeting Differentiation. I'll bias question choice and scoring toward that dim."
 
@@ -66,7 +67,7 @@ Candidate answers. **Do not score the warmup.** Just confirm:
 
 Pick a harder question (or a follow-up that probes the same answer deeper). Candidate answers.
 
-Score silently against the 5-dim rubric. Apply seniority calibration for Senior/Lead (Miklós's band — confirm from `_profile.md`).
+Score silently against the 5-dim rubric. Apply seniority calibration for Senior/Lead (Miklós's band — confirm from `config/profile.md`).
 
 Detect root causes — does the answer show any of the 9 patterns from `_rubrics.md`? If two or more rounds in this session show the same cause, that cause goes into the revisit queue at session end.
 
@@ -159,4 +160,4 @@ When picking questions, draw from (in priority order):
 - `data/score-history.md` — append one row per scored round
 - `data/revisit-queue.md` — update or append based on detected root causes
 - `config/story-bank.md` — increment `Use Count` and update `Last Used` only if a specific story `--story S0XX` was practiced and the candidate confirms "I'd use this in a real interview" at end-of-session. (Default: no story-bank writes from practice.)
-- `config/_profile.md` — only edit the `## Active Strategy` section if the candidate explicitly asks for a strategy pivot.
+- `data/active-strategy.md` — only edit it if the candidate explicitly asks for a strategy pivot.
