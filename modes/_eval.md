@@ -1,7 +1,13 @@
 # Mode: _eval — Lean evaluation (A/B/C/D scored)
 
 Called after `modes/_location-gate.md` returns ALLOW. Reads
-`data/jds/{NUM}-*.md`, `config/cv.md`, and `config/profile.md`.
+`data/jds/{NUM}-*.md`, the **id-annotated CV**, and `config/profile.md`.
+
+Get the id-annotated CV with `node lib/cv-json-to-md.mjs --annotate-ids
+--stdout` — it is `config/cv.json` rendered as prose with each bullet's
+stable source id appended, e.g. `- Took the product from 0 to $1M ARR
+[secberus-b1]`. Cite those ids in Block A (see below); they are
+load-bearing for CV generation downstream.
 
 Writes `data/reports/{NUM}-{company-slug}-{YYYY-MM-DD}.md` and a TSV row
 to `data/tracker-additions/{NUM}-{company-slug}.tsv`.
@@ -53,11 +59,12 @@ calculation); legitimacy is not assessed at this stage.
 
 ### A: CV Match — X/5
 
-What the JD asks for, and how closely `config/cv.md` matches.
+What the JD asks for, and how closely the id-annotated CV matches.
 
 - Lead with the strongest match (a single bullet naming the specific requirement and the CV line).
-- Note 1–4 clear gaps with one-sentence mitigations (adjacent experience, relevant project, cover-letter angle).
-- Cite exact phrases from `config/cv.md` where possible, no invented metrics.
+- **Every Match cites its source id**: end the match bullet with `[src: <id>]` using the id annotated on the cited CV bullet (e.g. `… proven 0→$1M ARR ownership [src: secberus-b1]`). A Story Bank match cites its `S0xx` id. These ids are the authoritative, machine-checked handles the CV generator and validator rely on — an uncited or wrong-id Match is unusable downstream.
+- Note 1–4 clear gaps with one-sentence mitigations (adjacent experience, relevant project, cover-letter angle). Gaps name the JD requirement; they carry no `[src:]` (a gap has no supporting line).
+- Cite exact phrases from the CV where possible, no invented metrics.
 
 ### B: North Star — X/5
 
@@ -139,9 +146,9 @@ Score / Report / Notes.
 
 Invariants for this pass:
 
-- **Never invent experience or metrics.** Read them from `config/cv.md`
-  and `config/story-bank.md` at evaluation time; cite the exact CV line
-  when matching (see the Block A guidance above).
+- **Never invent experience or metrics.** Read them from the id-annotated
+  CV and `config/story-bank.md` at evaluation time; cite the exact CV line
+  **and its `[src: <id>]`** when matching (see the Block A guidance above).
 - **Zero WebSearch.** This pass never touches the open web. If something
   can only be known by searching (real comp, layoffs, funding, posting
   liveness), it is out of scope here — flag it for interview-prep instead.

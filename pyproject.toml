@@ -6,6 +6,7 @@ requires-python = ">=3.11"
 dependencies = [
     "weasyprint>=62",
     "markdown>=3.6",
+    "pypdf>=4",
 ]
 
 [tool.uv]

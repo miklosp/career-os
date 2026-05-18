@@ -1,0 +1,26 @@
+# notes.yml — structured Personal Notes (copy to config/notes.yml).
+#
+# Confirmed claims you can defend in an interview but haven't put on the CV
+# yet. These are a closed, validated evidence source for CV generation —
+# replacing free-text notes pasted into a JD (which had no schema or audit
+# trail). The generator may cite a confirmed note as [src: n1], [src: n2], …
+# (id = list order). Every note-derived claim is surfaced as a bridge with
+# source_type: "notes" for your review.
+#
+# Rules:
+#   - Only `confirmed: true` notes are treated as evidence. `false` = ignored.
+#   - source_type:
+#       confirmed_cv_omission  — true experience simply not on the CV yet
+#       new_quantified_outcome — a metric/result you can substantiate
+#   - supporting_detail: the specific, defensible substance (not a vibe).
+#   - Keep these honest. A note is interview-defensible fact, not aspiration.
+
+notes:
+  - claim: "Ran weekly customer discovery interviews for two quarters"
+    source_type: confirmed_cv_omission
+    supporting_detail: "~25 interviews with ICP buyers; notes and synthesis in Dovetail"
+    confirmed: false
+  - claim: "Cut onboarding drop-off from 60% to 38%"
+    source_type: new_quantified_outcome
+    supporting_detail: "Funnel analytics before/after the redesigned activation flow"
+    confirmed: false

@@ -4,7 +4,7 @@ An AI job-search pipeline wired into Claude Code and custom dashboard. Human ove
 
 ## Personalization
 
-User-specific content (archetypes, narrative, proof points, location policy, comp anchor, voice) goes in `config/profile.md` — YAML frontmatter for the structured contracts (`candidate`, `location_policy`, `tooling`), markdown body for everything LLM modes read as prose. **NEVER put user-specific content in `modes/` system files.** When the user asks to customize archetypes/scoring/companies, edit the relevant `config/` or `modes/` file directly.
+User-specific content (archetypes, narrative, proof points, location policy, comp anchor, voice) goes in `config/profile.md` — YAML frontmatter for the structured contracts (`candidate`, `location_policy`), markdown body for everything LLM modes read as prose. The dashboard apply-flow agent is set by `CAREER_OPS_APPLY_AGENT` in `.env`, not in `profile.md`. **NEVER put user-specific content in `modes/` system files.** When the user asks to customize archetypes/scoring/companies, edit the relevant `config/` or `modes/` file directly.
 
 | Request | Edit |
 |---|---|
@@ -16,10 +16,10 @@ User-specific content (archetypes, narrative, proof points, location policy, com
 
 ## Data Contract (CRITICAL)
 
-- **`config/`** — user-edited inputs. `cv.md`, `profile.md`, `portals.yml`, `story-bank.md`. Personalization goes HERE.
+- **`config/`** — user-edited inputs. `cv.json`, `profile.md`, `portals.yml`, `story-bank.md`, `aliases.yml`, `notes.yml`. Personalization goes HERE.
 - **`data/` + `output/`** — system-written state, including `data/active-strategy.md` (coaching bottleneck, proposed-updated by `practice`/`mock`/`analyze`). Never assume a script may autonomously delete user files.
 - Everything else (`modes/`, `lib/`, `dashboard/`, `templates/`) is implementation, edited freely.
-- `config/cv.md` is the canonical CV. `config/story-bank.md` holds STAR+R stories. **NEVER hardcode metrics — cite from these at evaluation time.**
+- **`config/cv.json` is the canonical CV** (JSON Resume superset: per-bullet stable `id`s, `skills_inventory`, `evidence_refs`). `config/cv.md` is a *derived* human-readable view, regenerated deterministically by `lib/cv-json-to-md.mjs` (`pnpm cv-build`); never hand-edit it. `lib/cv-schema.mjs` is the single parser/serializer; `lib/cv-md-to-json.mjs` (`pnpm cv-migrate`) re-imports prose edits back to JSON. `config/story-bank.md` holds STAR+R stories (its `**ID:** S0xx` are valid `[src:]` targets). **NEVER hardcode metrics — cite from these at evaluation time.**
 
 ## The Pipeline
 
@@ -28,7 +28,7 @@ Every URL (user-pasted, multi-URL, or scan-discovered) takes the same path as a 
 1. **Fetch** — `lib/fetch-jd.mjs` (deterministic, zero-token): dedup, reserve NUM via `lib/next-num.mjs`, save `data/jds/{NUM}-*.md`, insert `Fetched` row. `modes/_fetch.md` is the LLM fallback only on `unknown-host`/`error`; it teaches `lib/ats-registry.json` so the next hit is zero-token.
 2. **Location gate** — `modes/_location-gate.md` vs `config/profile.md` frontmatter → `location_policy`. On SKIP: status `Skipped-Location`, quoted JD evidence in Notes, stop.
 3. **Score** — `modes/_eval.md`, Sonnet, inline in the agent (no nested subprocess). JD-text-only triage, **zero WebSearch**. A/B/C/D scored; weighted global score in the `**Score:**` header. Writes `data/reports/{NUM}-*.md` + a TSV in `data/tracker-additions/`.
-4. **CV personalization** — user-triggered only (dashboard `g`). Opus via Bifrost. Never part of the auto pipeline.
+4. **CV personalization** — user-triggered only (dashboard `g`).
 
 Agents NEVER call `merge-tracker.mjs` or `dedup-tracker.mjs` — only the user does.
 
@@ -36,7 +36,7 @@ Agents NEVER call `merge-tracker.mjs` or `dedup-tracker.mjs` — only the user d
 
 | User intent | Mode |
 |---|---|
-| Pastes one or more JDs/URLs | `auto-pipeline` (fan out one bg agent per URL) |
+| Pastes one or more URLs | `auto-pipeline` (fan out one bg agent per URL) |
 | Interview prep for a company | `interview-prep` (web research allowed here) |
 | Generate CV/PDF | `pdf` (Opus 4.7 via Bifrost, dashboard `g`) |
 | Application status | `tracker` |
@@ -47,11 +47,11 @@ Use path references to mode files, never inline their content into agent prompts
 
 ## Onboarding
 
-Silently each session, check: `config/cv.md`, `config/profile.md`, `config/portals.yml` exist (the real files, not `*.example`). If `config/profile.md` is missing, copy from `templates/profile.example.md` silently.
+Silently each session, check: `config/cv.json`, `config/profile.md`, `config/portals.yml` exist (the real files, not `*.example`). If `config/profile.md` is missing, copy from `templates/profile.example.md` silently.
 
 **If any required file is missing, enter onboarding — do nothing else until basics exist.** Walk the user through, in order:
 
-1. **CV** — offer: paste CV / paste LinkedIn / describe experience. Write clean `config/cv.md` (Summary, Experience, Projects, Education, Skills).
+1. **CV** — offer: paste CV / paste LinkedIn / describe experience. Write clean prose `config/cv.md` (Summary, Core Competencies, Experience, Education) in the `lib/cv-schema.mjs` shape, then `pnpm cv-migrate` to produce the canonical `config/cv.json`. Thereafter `config/cv.json` is the source of truth; regenerate the view with `pnpm cv-build`.
 2. **Profile** — copy `templates/profile.example.md` → `config/profile.md`; collect name, email, location, timezone, target roles, salary range into the frontmatter. Archetypes/narrative go in the markdown body.
 3. **Portals** — copy `templates/portals.example.yml` → `config/portals.yml`; align `title_filter.positive` with target roles.
 4. **Tracker** — create `data/applications.md` with header `| # | Date | Company | Role | Score | Status | PDF | Report | Notes |`.
@@ -62,10 +62,12 @@ Silently each session, check: `config/cv.md`, `config/profile.md`, `config/porta
 
 ## CV Generation → Fact-Check
 
-Two-model pipeline (Opus generator + Gemini reviewer — different family breaks correlated hallucinations). Flow diagram and file list: see README. Agent-relevant rules:
+Provenance-contracted pipeline: Opus generator under a `[src: id]` citation contract → deterministic validator (`lib/cv-validate.mjs`) → cross-family Gemini judge. Validator and judge are **separate controls**; the judge never substitutes for the validator. Agent-relevant rules:
 
-- Generator + reviewer both ground on the latest `data/reports/{NUM}-*.md`: Block A Matches are pre-validated; Block A Gaps are forbidden. Metrics must trace to a CV line or a `config/story-bank.md` entry. Raw JD only supplies wording for already-validated claims.
-- Severity tiers and default actions: `fabricated` (no support → apply conservative fix); `stretched` (thin support → apply conservative downgrade); `bridge` (CV/JD vocabulary substitution → **keep CV text**, apply only if the user genuinely has the JD-term experience).
+- The generator receives the **id-annotated** CV (`node lib/cv-json-to-md.mjs --annotate-ids --stdout`), confirmed `config/notes.yml`, story bank, and the latest `data/reports/{NUM}-*.md`. Closed-world evidence for any claim: `config/cv.json` bullet id · story-bank `S0xx` · confirmed note `n#` · Block-A Match id. Block-A Gaps are forbidden; raw JD only supplies wording for already-validated claims.
+- Every output bullet ends `[src: id]`; the Summary ends a composite `[src: …]`; Core Competencies is closed-world over `cv.json.skills_inventory ∪ config/aliases.yml`. The validator hard-fails missing/unknown ids, unsupported high-risk entities, out-of-inventory skills; on fail it retries with a `<failed_constraints>` diff (max 2) then **surfaces, never auto-revises** (exit non-zero → dashboard shows error, no auto-chain). `[src: id]` tags are stripped before render; titles/dates/descriptions are projected from `cv.json`.
+- Per-generation audit: `output/customized-cvs/{NUM}-{slug}-trace.json` (bullet→src, `<gaps>`, `<bridges>` with `source_type`, validator chain). The judge consumes this (citation map + gaps) and also runs a report-only keyword-survival audit; it never injects keywords.
+- Severity tiers / default actions: `fabricated` (no support → conservative fix); `stretched` (thin → conservative downgrade); `bridge` (CV↔JD vocabulary substitution → **keep CV text**, upgrade only if the user genuinely has the JD-term experience).
 - A row with `review-pending` status: pressing Enter opens the fact-check walkthrough **before** the report. Forced gate.
 - Never auto-revise from reviewer output — cascading edits introduce new leaks. Reviewer surfaces; user applies.
 

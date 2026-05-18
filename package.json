@@ -12,7 +12,11 @@
     "scan": "node scan.mjs",
     "fetch": "node lib/fetch-jd.mjs",
     "cv-llm": "node lib/generate-cv-llm.mjs",
-    "fact-check": "node lib/cv-fact-check.mjs"
+    "fact-check": "node lib/cv-fact-check.mjs",
+    "cv-migrate": "node lib/cv-md-to-json.mjs",
+    "cv-build": "node lib/cv-json-to-md.mjs",
+    "cv-check": "node lib/cv-json-to-md.mjs --check",
+    "kw-analysis": "node lib/keyword-frequency.mjs"
   },
   "keywords": [
     "ai",
