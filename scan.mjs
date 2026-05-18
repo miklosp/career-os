@@ -447,6 +447,9 @@ async function main() {
       `  ATS resolution:      voyager ${linkedinStats.voyager ?? "off"} — ${linkedinStats.resolved ?? 0} resolved, ${linkedinStats.easyApply ?? 0} easy-apply, ${linkedinStats.deferred ?? 0} deferred to apply-time`,
     );
     console.log(
+      `  Expired skipped:     ${linkedinStats.expired ?? 0} CLOSED/expired postings dropped (not dispatched)`,
+    );
+    console.log(
       `  Voyager calls:       ${linkedinStats.voyagerCalls ?? 0} made, ${linkedinStats.reused ?? 0} reused via company|title cache`,
     );
     console.log(
