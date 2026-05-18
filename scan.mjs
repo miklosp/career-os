@@ -449,6 +449,9 @@ async function main() {
     console.log(
       `  Voyager calls:       ${linkedinStats.voyagerCalls ?? 0} made, ${linkedinStats.reused ?? 0} reused via company|title cache`,
     );
+    console.log(
+      `  Reposts collapsed:   ${linkedinStats.repostsCollapsed ?? 0} same-role Easy-Apply/deferred dupes folded into one row`,
+    );
     if (linkedinStats.fatal) {
       console.log("");
       console.log(
