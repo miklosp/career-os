@@ -158,6 +158,14 @@ func ParseApplications(careerOpsPath string) []model.CareerApplication {
 		}
 	}
 
+	// Strategy 3.5: JD file **URL:** — the authoritative resolved canonical
+	// (employer ATS URL when Voyager resolved it). Fetched rows have no
+	// report yet, so reports' Strategy 1 misses them and they'd fall to
+	// scan-history company-matching, which returns the linkedin.com/jobs/view
+	// row. Read data/jds/{NUM}-*.md and prefer its ATS URL over a LinkedIn
+	// one so dashboard `open` opens the ATS, not LinkedIn.
+	enrichFromJDFiles(careerOpsPath, apps)
+
 	// Strategy 4: scan-history.tsv (pipeline scan entries matched by company+role)
 	enrichFromScanHistory(careerOpsPath, apps)
 
@@ -376,6 +384,62 @@ func loadJobURLs(careerOpsPath string) map[string]string {
 	}
 
 	return reportToURL
+}
+
+var reJDNumPrefix = regexp.MustCompile(`^(\d+)-`)
+
+func isLinkedInJobURL(u string) bool {
+	return strings.Contains(u, "linkedin.com/jobs/view")
+}
+
+// enrichFromJDFiles sets JobURL from data/jds/{NUM}-*.md's **URL:** header —
+// the authoritative resolved canonical written by fetch-jd/scan-linkedin
+// (employer ATS URL when resolved). Only fills apps with no URL yet or whose
+// URL is a bare linkedin.com/jobs/view link, so a resolved ATS URL always
+// wins for dashboard `open`. A JD that legitimately has only a LinkedIn URL
+// (Easy-Apply) is kept as-is.
+func enrichFromJDFiles(careerOpsPath string, apps []model.CareerApplication) {
+	jdsDir := filepath.Join(careerOpsPath, "data", "jds")
+	entries, err := os.ReadDir(jdsDir)
+	if err != nil {
+		return
+	}
+	byNum := make(map[string]string) // unpadded leading number -> path
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".md") {
+			continue
+		}
+		if m := reJDNumPrefix.FindStringSubmatch(e.Name()); m != nil {
+			byNum[strings.TrimLeft(m[1], "0")] = filepath.Join(jdsDir, e.Name())
+		}
+	}
+	for i := range apps {
+		cur := apps[i].JobURL
+		if cur != "" && !isLinkedInJobURL(cur) {
+			continue // already have a non-LinkedIn (ATS) URL
+		}
+		path, ok := byNum[strings.TrimLeft(strconv.Itoa(apps[i].Number), "0")]
+		if !ok {
+			continue
+		}
+		b, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		head := b
+		if len(head) > 1000 {
+			head = head[:1000]
+		}
+		m := reReportURL.FindStringSubmatch(string(head))
+		if m == nil {
+			continue
+		}
+		// Replace when we currently have nothing, or when the JD offers a
+		// real ATS URL in place of a LinkedIn one.
+		if cur == "" || !isLinkedInJobURL(m[1]) {
+			apps[i].JobURL = m[1]
+		}
+	}
 }
 
 // enrichFromScanHistory fills JobURL from scan-history.db (SQLite) by matching company name.
