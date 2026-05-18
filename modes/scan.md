@@ -2,7 +2,7 @@
 
 Discovers new job postings, filters by title, dedups against `data/scan-history.db`, and emits `DISPATCH_URLS=[...]` so the session can fan out one background `auto-pipeline` agent per URL.
 
-Levels 1 (ATS APIs), 2 (LinkedIn via Apify), 2b (remoteineurope.com), and 2c (hiring.cafe) run **entirely inside `node scan.mjs`** — zero LLM tokens. Level 3 (WebSearch) is the only agent-executed part, because WebSearch needs an LLM tool call. Implementation internals (Apify actors, LinkedIn filter codes, the hiring.cafe SSR/searchState scheme, rate-limit rationale, credit math, the `scan-history.db` schema) live in the script banners — `scan.mjs`, `lib/scan-linkedin.mjs`, `lib/scan-hiringcafe.mjs` — not here.
+Levels 1 (ATS APIs), 2 (LinkedIn via JobSpy), 2b (remoteineurope.com), and 2c (hiring.cafe) run **entirely inside `node scan.mjs`** — zero LLM tokens, free (no paid vendor). Level 3 (WebSearch) is the only agent-executed part, because WebSearch needs an LLM tool call. Implementation internals (the JobSpy subprocess, the optional Voyager ATS resolver, LinkedIn filter-code derivation, the hiring.cafe SSR/searchState scheme, rate-limit rationale, the `scan-history.db` schema) live in the script banners — `scan.mjs`, `lib/scan-linkedin.mjs`, `lib/scan-jobspy.py`, `lib/li-voyager.mjs`, `lib/scan-hiringcafe.mjs` — not here.
 
 ## Configuration
 
@@ -20,15 +20,15 @@ Run as a background subagent so scan output doesn't consume main context. The ag
    node scan.mjs
    ```
 
-   This does Levels 1/2/2b/2c zero-token: fetch ATS feeds + LinkedIn (Apify) + remoteineurope + hiring.cafe, apply the title filter, dedup against `data/scan-history.db` (auto-created, auto-migrates the legacy `.tsv`), write new rows, prefetch LinkedIn JDs into `data/jds/` + `Fetched` rows in `data/applications.md`.
+   This does Levels 1/2/2b/2c zero-token: fetch ATS feeds + LinkedIn (JobSpy) + remoteineurope + hiring.cafe, apply the title filter, dedup against `data/scan-history.db` (auto-created, auto-migrates the legacy `.tsv`), write new rows, prefetch LinkedIn JDs into `data/jds/` + `Fetched` rows in `data/applications.md`. The employer ATS URL is resolved at scan time only when `LINKEDIN_LI_AT` + `LINKEDIN_JSESSIONID` are in `.env` (the free authenticated Voyager path); otherwise the LinkedIn URL is stored and ATS resolution defers to apply-time.
 
 2. **Parse stdout:** read the `DISPATCH_URLS=[...]` line — a JSON array of canonical employer ATS URLs (Levels 1/2/2b/2c). Printed only when non-empty and not `--dry-run`.
 
-3. **Dispatch:** spawn **one background `auto-pipeline` agent per URL** (`modes/auto-pipeline.md`), bounded to ≤ 3 concurrent. Pre-fetched LinkedIn JDs dispatch as their canonical employer URL; the agent's `_fetch.md` Step 1 detects the existing `data/jds/` entry with `Fetched` status and skips straight to gate + score (no double-fetch, no duplicate Apify spend).
+3. **Dispatch:** spawn **one background `auto-pipeline` agent per URL** (`modes/auto-pipeline.md`), bounded to ≤ 3 concurrent. Pre-fetched LinkedIn JDs dispatch as their canonical URL (resolved employer ATS URL when Voyager ran, otherwise the LinkedIn URL); the agent's `_fetch.md` Step 1 detects the existing `data/jds/` entry with `Fetched` status and skips straight to gate + score (no double-fetch).
 
-### Insufficient-credit handling
+### Degraded-LinkedIn handling
 
-If `scan.mjs` stdout contains `SCAN_FATAL=apify-insufficient-credits` (printed before any `DISPATCH_URLS=`), the user's Apify balance is exhausted. **Stop and tell the user** the LinkedIn level was skipped for lack of funds and point them at top-up / narrowing `datePosted`. Do **not** retry Apify and do **not** fall back to CDP scraping. Levels 1/2b/2c/3 still ran — dispatch their URLs as normal. The detection (error classification + balance probe) is deterministic and lives in `lib/scan-linkedin.mjs`; this mode only reacts to the marker.
+If `scan.mjs` stdout contains `SCAN_FATAL=jobspy-unavailable` (printed before any `DISPATCH_URLS=`), the LinkedIn level could not run because `uv` is not on PATH or `python-jobspy` is not installable. **Stop and tell the user** the LinkedIn level was skipped and that JobSpy needs `uv` available (it runs `uv run --with python-jobspy`). Levels 1/2b/2c/3 still ran — dispatch their URLs as normal. Detection is deterministic in `lib/scan-linkedin.mjs`; this mode only reacts to the marker. (If `LINKEDIN_LI_AT`/`LINKEDIN_JSESSIONID` are unset, that is **not** fatal — scan still runs and stores LinkedIn URLs; ATS resolution just defers to apply-time.)
 
 ## Level 3 — WebSearch + liveness check (agent-executed)
 

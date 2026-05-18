@@ -23,16 +23,17 @@
  *     url        TEXT PRIMARY KEY,   -- LinkedIn rows store linkedin.com/jobs/view/{id}
  *     first_seen TEXT NOT NULL,      -- YYYY-MM-DD
  *     portal     TEXT,               -- greenhouse-api | ashby-api | lever-api
- *                                    -- | linkedin-apify | remoteineurope | websearch — …
+ *                                    -- | linkedin-jobspy | remoteineurope | websearch — …
  *     title      TEXT,
  *     company    TEXT,
  *     status     TEXT NOT NULL DEFAULT 'added'
  *                -- added | skipped_title | skipped_dup | skipped_expired
  *   );
  *
- * Insufficient-credit contract: if the LinkedIn level (lib/scan-linkedin.mjs)
- * detects an exhausted Apify account, this script prints a single line
- *   SCAN_FATAL=apify-insufficient-credits
+ * Degraded-LinkedIn contract: if the LinkedIn level (lib/scan-linkedin.mjs)
+ * cannot run JobSpy (no `uv` on PATH, or python-jobspy not installable),
+ * this script prints a single line
+ *   SCAN_FATAL=jobspy-unavailable
  * BEFORE any DISPATCH_URLS= line. It is non-fatal to the run — Levels 1/2b/3
  * still execute and their URLs are still dispatched; only LinkedIn is skipped.
  *
@@ -52,8 +53,9 @@ import { openScanHistoryDb, loadSeenUrls, recordOffers } from './lib/scan-histor
 import { isBanned } from './lib/ban-list.mjs';
 const parseYaml = yaml.load;
 
-// Auto-load .env so APIFY_API_TOKEN / FIRECRAWL_API_KEY are available
-// without requiring the caller to source it. Silent if .env is absent.
+// Auto-load .env so FIRECRAWL_API_KEY and the optional LinkedIn cookies
+// (LINKEDIN_LI_AT / LINKEDIN_JSESSIONID) are available without requiring the
+// caller to source it. Silent if .env is absent.
 function loadDotenv(path = '.env') {
   if (!existsSync(path)) return;
   for (const line of readFileSync(path, 'utf-8').split('\n')) {
@@ -313,12 +315,15 @@ async function main() {
     recordOffers(db, newOffers.map(o => ({ url: o.url, title: o.title, company: o.company, portal: o.source })), { firstSeen: date });
   }
 
-  // 5b. LinkedIn — Apify-based discovery + per-JD detail prefetch.
-  // Pure HTTP, zero LLM tokens. Pre-writes data/jds/ + applications.md row so
-  // dispatched auto-pipeline agents skip _fetch.md and run gate+score only.
+  // 5b. LinkedIn — JobSpy discovery + JD prefetch (free, no Apify, zero LLM
+  // tokens). Pre-writes data/jds/ + applications.md row so dispatched
+  // auto-pipeline agents skip _fetch.md and run gate+score only. Employer
+  // ATS URL is resolved here only when LINKEDIN_LI_AT + LINKEDIN_JSESSIONID
+  // are set (lib/li-voyager.mjs); otherwise the LinkedIn URL is stored and
+  // resolution defers to apply-time.
   let linkedinUrls = [];
   let linkedinStats = null;
-  if (config.linkedin_searches?.length && process.env.APIFY_API_TOKEN) {
+  if (config.linkedin_searches?.length) {
     const jdsDir = resolve('data/jds');
     mkdirSync(jdsDir, { recursive: true });
     try {
@@ -327,16 +332,13 @@ async function main() {
         portalsCfg: config,
         applicationsPath: APPLICATIONS_PATH,
         jdsDir,
-        token: process.env.APIFY_API_TOKEN,
         dryRun,
       });
       linkedinUrls = result.newUrls;
       linkedinStats = result.stats;
     } catch (err) {
-      errors.push({ company: 'LinkedIn (Apify)', error: err.message });
+      errors.push({ company: 'LinkedIn (JobSpy)', error: err.message });
     }
-  } else if (!process.env.APIFY_API_TOKEN) {
-    console.log('(LinkedIn level skipped — APIFY_API_TOKEN not set in .env)');
   }
 
   // 5c. remoteineurope.com — sitemap + per-page scrape, free, no Apify.
@@ -397,14 +399,15 @@ async function main() {
 
   if (linkedinStats) {
     console.log('');
-    console.log(`LinkedIn (Apify):      ${linkedinStats.searches} searches, ${linkedinStats.idsReturned} ids, ${linkedinStats.afterTitleFilter} after title filter`);
+    console.log(`LinkedIn (JobSpy):     ${linkedinStats.searches} searches, ${linkedinStats.idsReturned} ids, ${linkedinStats.afterTitleFilter} after title filter`);
     console.log(`  Prefetched JDs:      ${linkedinStats.prefetched}`);
     console.log(`  Skipped (title):     ${linkedinStats.skipped}`);
     console.log(`  Banned skipped:      ${linkedinStats.banned ?? 0}`);
-    if (linkedinStats.fatal === 'apify-insufficient-credits') {
+    console.log(`  ATS resolution:      voyager ${linkedinStats.voyager ?? 'off'} — ${linkedinStats.resolved ?? 0} resolved, ${linkedinStats.easyApply ?? 0} easy-apply, ${linkedinStats.deferred ?? 0} deferred to apply-time`);
+    if (linkedinStats.fatal) {
       console.log('');
-      console.log(`  ⚠ LinkedIn level SKIPPED — Apify account out of credits${linkedinStats.fatalDetail ? ` (${linkedinStats.fatalDetail})` : ''}.`);
-      console.log('    Top up at https://console.apify.com/billing or narrow datePosted. Other levels ran normally.');
+      console.log(`  ⚠ LinkedIn level SKIPPED — ${linkedinStats.fatal}${linkedinStats.fatalDetail ? ` (${linkedinStats.fatalDetail})` : ''}.`);
+      console.log('    JobSpy needs `uv` on PATH (it runs `uv run --with python-jobspy`). Other levels ran normally.');
     }
   }
   if (rieStats) {
@@ -452,9 +455,10 @@ async function main() {
   }
 
   // Machine-readable fatal marker — ALWAYS printed before DISPATCH_URLS so the
-  // orchestrator can deterministically detect the credit-exhaustion case.
-  if (linkedinStats?.fatal === 'apify-insufficient-credits') {
-    console.log('\nSCAN_FATAL=apify-insufficient-credits');
+  // orchestrator can deterministically detect a degraded LinkedIn level
+  // (e.g. jobspy-unavailable when `uv` is missing). Other levels still ran.
+  if (linkedinStats?.fatal) {
+    console.log(`\nSCAN_FATAL=${linkedinStats.fatal}`);
   }
 
   if (dispatchUrls.length > 0) {
