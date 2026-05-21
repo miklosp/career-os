@@ -425,25 +425,21 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		app := msg.App
 		careerOpsPath := msg.CareerOpsPath
 		return m, func() tea.Msg {
-			// Primed initial prompt for the interactive Claude Code session.
-			// The slash command must lead; apply.md handles the rest (its
-			// Step 1 cmux path opens the form itself).
-			var b strings.Builder
-			fmt.Fprintf(&b, "/career-ops apply — application #%d: %s — %s.",
-				app.Number, app.Company, app.Role)
-			if app.ReportNumber != "" {
-				fmt.Fprintf(&b, " Report: data/reports/%s-*.md.", app.ReportNumber)
-			}
-			if app.JobURL != "" {
-				fmt.Fprintf(&b, " Form URL: %s", app.JobURL)
-			}
-			prompt := b.String()
+			// Resolve the launcher first: the primed prompt is shaped
+			// per agent. Claude Code resolves the repo-local
+			// `.claude/skills/career-ops` skill, so it gets the
+			// `/career-ops apply …` slash form. Every other agent has no
+			// such skill, so it gets a self-contained instruction that
+			// points it straight at modes/apply.md + CLAUDE.md. applyPrompt
+			// decides from the launcher's leading token.
+			launcher := applyLauncher(careerOpsPath)
+			prompt := applyPrompt(launcher, careerOpsPath, app)
 
 			// Inside a reachable cmux: spawn a new workspace (tab) running
-			// an interactive, primed Claude Code session in the repo.
+			// an interactive, primed agent session in the repo.
 			//
 			// The launcher token comes from applyLauncher() (env →
-			// profile.md → "claude") and is run through an interactive
+			// .env CAREER_OPS_APPLY_AGENT → "claude") and is run through an interactive
 			// shell (`$SHELL -ic`) so ~/.zshrc is sourced and the user's
 			// `claude()` function (→ `safe claude
 			// --dangerously-skip-permissions …` Agent Safehouse wrapper)
@@ -463,7 +459,6 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// CMUX_* vars.
 			if cmuxBin, ok := cmuxReachable(); ok {
 				title := "Apply · " + app.Company
-				launcher := applyLauncher(careerOpsPath)
 				shell := os.Getenv("SHELL")
 				if shell == "" {
 					shell = "/bin/zsh"
@@ -623,32 +618,141 @@ func findJDFileByNum(careerOpsPath, num string) string {
 	return ""
 }
 
-// reApplyAgent extracts a top-of-line `apply_agent:` scalar from the
-// config/profile.md frontmatter (commented lines start with `#` so they don't
-// match; the regex is line-anchored so the YAML frontmatter block is enough).
-// Dependency-free, in
-// the same targeted-regex style as internal/data/career.go.
-var reApplyAgent = regexp.MustCompile(`(?m)^[ \t]*apply_agent:[ \t]*["']?([^"'#\n]+?)["']?[ \t]*(?:#.*)?$`)
+// reApplyAgentEnv extracts the `CAREER_OPS_APPLY_AGENT` value from the repo
+// `.env` file (line-anchored, optional `export `, optional quotes; comment
+// lines start with `#` so they don't match). Dependency-free, in the same
+// targeted-regex style as internal/data/career.go — the dashboard never needs
+// a general dotenv parser, just this one key.
+var reApplyAgentEnv = regexp.MustCompile(`(?m)^[ \t]*(?:export[ \t]+)?CAREER_OPS_APPLY_AGENT[ \t]*=[ \t]*["']?([^"'#\n\r]+?)["']?[ \t]*$`)
 
-// applyLauncher resolves the coding-agent command the dashboard launches for
-// the interactive apply flow. Precedence: $CAREER_OPS_APPLY_CMD (one-off
-// override) → config/profile.md `tooling.apply_agent` → "claude". The value
-// is a launcher token/command, not a path: it is run through `$SHELL -ic`, so
-// shell functions/aliases (e.g. a sandbox wrapper) still resolve. Note this
-// swaps only the launcher; the primed prompt stays `/career-ops apply …`,
-// which assumes a Claude-Code-style agent that resolves that slash command.
+// applyAgentCmd maps a supported agent key to the command PREFIX that starts
+// an interactive session and seeds it with the initial prompt. The call site
+// appends ` <shell-quoted prompt>`, so each value is exactly what must precede
+// the quoted message:
+//
+//	claude    "<msg>"   positional → seeds the interactive session
+//	codex     "<msg>"   positional → seeds the interactive TUI
+//	gemini -i "<msg>"   -i/--prompt-interactive (bare positional is headless)
+//	opencode --prompt "<msg>"   pre-fills the TUI composer (no positional form)
+//	pi        "<msg>"   interactive is the default; -p would be print mode
+var applyAgentCmd = map[string]string{
+	"claude":   "claude",
+	"codex":    "codex",
+	"gemini":   "gemini -i",
+	"opencode": "opencode --prompt",
+	"pi":       "pi",
+}
+
+// applyLauncher resolves the command prefix the dashboard launches for the
+// interactive apply flow. Precedence: $CAREER_OPS_APPLY_CMD (process-env
+// escape hatch, used verbatim as the prefix) → `.env` CAREER_OPS_APPLY_AGENT
+// mapped through applyAgentCmd → "claude". The value is a launcher
+// token/command, not a path: it is run through `$SHELL -ic`, so shell
+// functions/aliases (e.g. a sandbox wrapper) still resolve. Note this swaps
+// only the launcher; the primed prompt is shaped separately by applyPrompt,
+// keyed off the launcher's leading token.
 func applyLauncher(careerOpsPath string) string {
 	if v := strings.TrimSpace(os.Getenv("CAREER_OPS_APPLY_CMD")); v != "" {
 		return v
 	}
-	if b, err := os.ReadFile(filepath.Join(careerOpsPath, "config", "profile.md")); err == nil {
-		if m := reApplyAgent.FindSubmatch(b); m != nil {
-			if v := strings.TrimSpace(string(m[1])); v != "" {
-				return v
+	if b, err := os.ReadFile(filepath.Join(careerOpsPath, ".env")); err == nil {
+		if m := reApplyAgentEnv.FindSubmatch(b); m != nil {
+			key := strings.ToLower(strings.TrimSpace(string(m[1])))
+			if cmd, ok := applyAgentCmd[key]; ok {
+				return cmd
 			}
 		}
 	}
 	return "claude"
+}
+
+// applyPrompt builds the initial message the launched agent is primed with.
+// It is adapted per agent because the `/career-ops apply` slash command is
+// repo-local Claude-Code skill sugar (`.claude/skills/career-ops/SKILL.md`)
+// that nothing else reads:
+//
+//   - Claude Code (launcher leads with `claude`) → the native
+//     `/career-ops apply …` slash form; the skill router loads modes/apply.md.
+//   - Any other agent (codex, gemini, opencode, pi, or a custom launcher) →
+//     a self-contained instruction that points the agent straight at
+//     modes/apply.md + CLAUDE.md, since it has no career-ops command. The
+//     workflow itself is identical — apply.md is self-contained and pulls its
+//     shared standards via in-file path references.
+//
+// The dispatch carries exact paths, never globs: app.ReportPath comes straight
+// off the tracker link and resolveCustomizedCV() resolves the CV PDF here, so
+// the apply agent reads its context directly instead of ls/grep-ing for it.
+//
+// The leading token is matched on its basename so a wrapped path or a
+// `claude --flag …` custom override still resolves to the slash form.
+// Both forms keep the hard ethical constraint explicit: fill, never submit.
+func applyPrompt(launcher, careerOpsPath string, app model.CareerApplication) string {
+	agent := ""
+	if fields := strings.Fields(launcher); len(fields) > 0 {
+		agent = filepath.Base(fields[0])
+	}
+
+	// Exact report path off the tracker link; fall back to a NUM glob only
+	// when the row carries no report link at all.
+	report := app.ReportPath
+	if report == "" && app.ReportNumber != "" {
+		report = "data/reports/" + app.ReportNumber + "-*.md"
+	}
+	cv := resolveCustomizedCV(careerOpsPath, app.ReportNumber)
+
+	var b strings.Builder
+	if agent == "claude" {
+		// Slash command must lead; apply.md handles the rest (Step 1
+		// opens the Form URL itself).
+		fmt.Fprintf(&b, "/career-ops apply — application #%d: %s — %s.",
+			app.Number, app.Company, app.Role)
+		if report != "" {
+			fmt.Fprintf(&b, " Report: %s.", report)
+		}
+		if cv != "" {
+			fmt.Fprintf(&b, " CV PDF: %s.", cv)
+		}
+		if app.JobURL != "" {
+			fmt.Fprintf(&b, " Form URL: %s", app.JobURL)
+		}
+		return b.String()
+	}
+
+	fmt.Fprintf(&b, "Read ./modes/apply.md and ./CLAUDE.md, then run the "+
+		"career-ops live application assistant for application #%d: %s — %s.",
+		app.Number, app.Company, app.Role)
+	if report != "" {
+		fmt.Fprintf(&b, " Evaluation report: %s.", report)
+	}
+	if cv != "" {
+		fmt.Fprintf(&b, " CV PDF: %s.", cv)
+	}
+	if app.JobURL != "" {
+		fmt.Fprintf(&b, " Form URL: %s.", app.JobURL)
+	}
+	b.WriteString(" Follow modes/apply.md exactly — fill the form fields with " +
+		"customized answers but STOP before Submit/Send so the user reviews " +
+		"and submits.")
+	return b.String()
+}
+
+// resolveCustomizedCV returns the repo-relative path of the customized CV PDF
+// for a tracker NUM (output/customized-cvs/{NUM}-*-cv.pdf), or "" when none has
+// been generated yet. Passing the exact path spares the apply agent a glob.
+func resolveCustomizedCV(careerOpsPath, num string) string {
+	if num == "" {
+		return ""
+	}
+	matches, err := filepath.Glob(filepath.Join(
+		careerOpsPath, "output", "customized-cvs", num+"-*-cv.pdf"))
+	if err != nil || len(matches) == 0 {
+		return ""
+	}
+	rel, err := filepath.Rel(careerOpsPath, matches[0])
+	if err != nil {
+		return ""
+	}
+	return rel
 }
 
 // cmuxReachable reports whether this process can actually drive cmux, and
