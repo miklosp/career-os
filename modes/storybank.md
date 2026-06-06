@@ -24,6 +24,23 @@ Do NOT read `config/cv.md` or `config/profile.md` here. The storybank is its own
 
 If no subcommand is given, default to `review`.
 
+## Confirmation panels
+
+All fixed-option prompts in this mode use the **AskUserQuestion** tool, not typed text prompts. Free-text dictation — the reflection questions, STAR+R capture, titles, source notes — stays conversational prose.
+
+**Draft-confirmation panel.** Reused after every drafted field. Call AskUserQuestion with header `Draft` and these options:
+
+- **Approve** — accept the draft as written; save it and move on.
+- **Edit** — change something. If the user attached a note describing the change, use it; otherwise follow up with a plain "What should I change?" prompt. Then redraft and re-show the panel.
+- **Redo** — try a different framing from scratch.
+- **Skip** — leave the field blank (`—`).
+
+For required fields that cannot be blank (STAR+R in `add`), drop **Skip** — show Approve / Edit / Redo only.
+
+**Quit convention.** AskUserQuestion shows at most 4 options plus a free-text "Other". Quit has no button: dismissing any panel (Escape) ends the mode, and an `Other` answer of `quit` / `stop` / `exit` does the same. Any other `Other` text on a draft-confirmation panel is treated as an Edit instruction.
+
+Loop the draft-confirmation panel until the user picks Approve or Skip.
+
 ---
 
 ## `review` — Per-story walkthrough
@@ -38,7 +55,7 @@ Scan `config/story-bank.md`. Build a list of stories where any of these fields i
 
 Tell the candidate:
 
-> "I have {N} stories in the bank. {M} need filling-in. Walking through them now. You can dictate naturally — I'll format. Any time: type `skip` to leave a story for later, `quit` to stop, `back` to redo the previous story."
+> "I have {N} stories in the bank. {M} need filling-in. Walking through them now. You can dictate naturally — I'll format. Each story opens with a Review / Skip / Quit / Back panel; you can also say `skip` or `quit` any time during a story."
 
 If `--all`, include already-filled stories. If `--story S0XX`, jump directly to that one.
 
@@ -59,13 +76,16 @@ Current header fields:
   Earned Secret: {value or —}
   Risk/Stakes: {value or —}
   Best For: {value}
-
-Ready to review this one? [y / skip / quit / back]
 ```
 
-If `skip`: move to next story, story stays untouched.
-If `quit`: exit the loop. Print summary: "Reviewed M stories this session. {N} remain."
-If `back`: go back to the previous story (allow re-editing).
+Then call the **review gate** panel — AskUserQuestion, header `Review`, question "Review {ID} now?", options:
+
+- **Review it** — start the field-by-field walkthrough for this story.
+- **Skip** — move to the next story; this one stays untouched.
+- **Quit** — exit the loop. Print summary: "Reviewed M stories this session. {N} remain."
+- **Back** — go back to the previous story to re-edit it. **Omit this option on the first story** — there is nothing to go back to.
+
+Escape, or an `Other` answer of `quit`, also exits the loop.
 
 ### Step 2: Earned Secret — extraction protocol
 
@@ -84,15 +104,15 @@ Continue through the 5 questions:
 4. "What counterintuitive lesson did you learn?"
 5. "What would you tell your past self?"
 
-If the candidate's first answer already contains a strong earned secret, you can short-circuit:
+If the candidate's first answer already contains a strong earned secret, short-circuit: say "That actually sounds like the earned secret." Then call AskUserQuestion — header `Earned Secret`, two options:
 
-> "That actually sounds like the earned secret. Want to stop here and draft it, or keep going?"
+- **Draft it now** — jump to Step 3.
+- **Keep going** — continue the reflection protocol.
 
-If they say keep going: continue the protocol. If they say draft: jump to Step 3.
+If after Q3 the candidate is repeating themselves or saying "I don't know" / "nothing earned-secret-y here": that's a real answer. Some stories don't have earned secrets. Say "Sounds like this story is more proof than insight — and that's fine, not every story has an earned secret." Then call AskUserQuestion — header `Earned Secret`, two options:
 
-If after Q3 the candidate is repeating themselves or saying "I don't know" / "nothing earned-secret-y here": that's a real answer. Some stories don't have earned secrets. Offer:
-
-> "Sounds like this story is more proof than insight. That's fine — not every story has an earned secret. I can leave that field blank and fill in Strength + Risk/Stakes. Or you can try a different framing. Which?"
+- **Leave blank** — leave Earned Secret as `—` and move on to Strength + Risk/Stakes.
+- **Different framing** — try the reflection from a different angle.
 
 ### Step 3: Draft the Earned Secret
 
@@ -104,11 +124,7 @@ Take everything the candidate said across the 5 questions and draft:
   When to Deploy: [1-3 question types where this earned secret lands hardest.]
 ```
 
-Show the draft inline. Then:
-
-> "Here's the draft. Pick one: [a]pprove, [e]dit (tell me what to change), [r]edo (try a different framing), [s]kip this field, [q]uit."
-
-Loop until approved or skipped.
+Show the draft inline, then run the **draft-confirmation panel** (see Confirmation panels) — Approve / Edit / Redo / Skip. Loop until the user approves or skips.
 
 **Quality bar for Earned Secrets** (your internal check before showing the draft):
 - Not generic advice ("communication is important")
@@ -134,19 +150,17 @@ Show the candidate:
 
 Capture the answer. If they describe rather than number, propose a score and confirm.
 
+Strength stays a typed prompt by design — a 1-5 scale plus a "describe it" fallback doesn't fit a fixed-option panel.
+
 ### Step 5: Risk/Stakes
 
 > "Risk/Stakes — what could have gone wrong? Why did this matter? One or two sentences."
 
-Capture verbatim, lightly edit for clarity. Show the draft. Approve/edit/redo loop.
+Capture verbatim, lightly edit for clarity. Show the draft, then run the **draft-confirmation panel** — Approve / Edit / Redo / Skip (Skip is valid; Risk/Stakes may stay `—`).
 
 ### Step 6: Domain
 
-Quick prompt:
-
-> "Domain — pick one: Technical / Product / Business / People."
-
-Capture. No back-and-forth.
+Call AskUserQuestion — header `Domain`, one question, four options: **Technical**, **Product**, **Business**, **People**. Capture the selection. No back-and-forth.
 
 ### Step 7: Secondary Skill (optional)
 
@@ -182,13 +196,17 @@ Remaining (still have empty fields): {L}
 
 Use this when the candidate identifies a story they want to add — usually mid-interview prep when a gap surfaces.
 
+### Step 0: Check the bank for existing coverage
+
+Before capturing anything, read `config/story-bank.md` and ask the candidate one or two placing questions — which company, which project. If a story already covers that underlying experience (even under a different interview angle), **don't add a duplicate**: offer to extend that story's **Best For** list with the new question type instead, via the draft-confirmation panel. Only proceed to Step 1 when the experience is genuinely not in the bank.
+
 ### Step 1: Capture STAR+R
 
 Walk the candidate through STAR+R, one field at a time, dictation-friendly:
 
 > "Let's capture a new story. First: the **Situation** — set the scene in 2-3 sentences. What was going on, what was the context?"
 
-Capture. Draft the formatted version. Show inline. Approve/edit/redo.
+Capture. Draft the formatted version. Show inline, then run the **draft-confirmation panel** — Approve / Edit / Redo only (no Skip; STAR+R fields are required).
 
 Repeat for:
 - **Task** — your specific responsibility
@@ -266,7 +284,7 @@ Action: bank is healthy. No action needed.
 
 ## Rules
 
-- **Never write to `config/story-bank.md` without explicit candidate approval.** Every field needs an [a]pprove confirmation.
+- **Never write to `config/story-bank.md` without explicit candidate approval.** A field is written only after the candidate selects **Approve** on its confirmation panel.
 - **Never invent earned secrets.** If the candidate's input doesn't contain a real insight, leave Earned Secret as `—` and move on.
 - **STAR+R body and heading are immutable in `review`.** Only header-block fields change.
 - **One field at a time during dictation.** Don't fire 5 questions at once — the candidate is talking, not filling a form.

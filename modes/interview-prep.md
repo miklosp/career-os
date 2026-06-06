@@ -89,7 +89,7 @@ For each: the likely question, why it comes up, and a recommended framing (hones
 
 For each gap, suggest: "You need a story about {topic}. Consider: {specific experience from config/cv.md that could become a STAR+R story}."
 
-If the user wants to draft missing stories, help them build STAR+R format and append to `config/story-bank.md`.
+If a gap has no mapped story, **check for near-coverage before drafting a new one**: scan every story's **Best For** list and STAR+R body. If an existing story already covers the underlying experience — even under a different interview angle — extend its **Best For** with the new question type rather than creating a near-duplicate. Draft a genuinely new story only when no existing story maps to the experience; route the user through `/career-ops storybank add` so it gets the next free `S0xx` id and a complete header.
 
 ## Step 6 — Technical Prep Checklist
 

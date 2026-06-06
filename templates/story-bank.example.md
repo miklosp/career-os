@@ -1,15 +1,22 @@
 # Story Bank — Master STAR+R Stories
 
-This file accumulates your best interview stories over time. Each evaluation (Block F) appends new stories here. Instead of memorizing 100 answers, maintain 5-10 deep stories that you can bend to answer almost any behavioral question.
+A curated bank of your best interview stories — one story per real experience, not one per interview angle. Instead of memorizing 100 answers, you maintain a small set of deep stories that bend to answer almost any behavioral question.
 
 ## How it works
 
-1. Every time `/career-ops` generates Block F (Interview Plan), new STAR+R stories get appended here
-2. Before your next interview, review this file — your stories are already organized by theme
-3. The "Big Three" questions can be answered with stories from this bank:
-   - "Tell me about yourself" → combine 2-3 stories into a narrative
-   - "Tell me about your most impactful project" → pick your highest-impact story
-   - "Tell me about a conflict you resolved" → find a story with a Reflection
+Stories are added deliberately, never automatically. Two paths, both user-triggered:
+
+1. `/career-ops storybank add` — capture a new story end-to-end.
+2. `/career-ops interview-prep` — when prep surfaces a question no existing story covers, it offers to draft one.
+
+Both paths check the bank first: if an existing story already covers the experience, its **Best For** list is extended instead of adding a near-duplicate. The evaluation and CV pipelines only read this bank (for `[src: S0xx]` citations) — they never append to it.
+
+Maintenance: `/career-ops storybank review` fills in empty header fields; `/career-ops storybank status` reports bank health.
+
+The "Big Three" questions are answered from this bank:
+- "Tell me about yourself" → combine 2-3 stories into a narrative
+- "Tell me about your most impactful project" → pick your highest-impact story
+- "Tell me about a conflict you resolved" → find a story with a Reflection
 
 ## Stories
 
