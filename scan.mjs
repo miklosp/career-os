@@ -3,9 +3,10 @@
 /**
  * scan.mjs — Zero-token portal scanner
  *
- * Fetches Greenhouse, Ashby, and Lever APIs directly, applies title
- * filters from portals.yml, deduplicates against data/scan-history.db and
- * data/applications.md, and records new URLs.
+ * Fetches Greenhouse, Ashby, Lever, Recruitee, Teamtailor, and join.team
+ * APIs directly, applies title filters from portals.yml, deduplicates
+ * against data/scan-history.db and data/applications.md, and records new
+ * URLs.
  *
  * Zero Claude API tokens — pure HTTP + JSON.
  *
@@ -23,6 +24,7 @@
  *     url        TEXT PRIMARY KEY,   -- LinkedIn rows store linkedin.com/jobs/view/{id}
  *     first_seen TEXT NOT NULL,      -- YYYY-MM-DD
  *     portal     TEXT,               -- greenhouse-api | ashby-api | lever-api
+ *                                    -- | recruitee-api | teamtailor-api | join_team-api
  *                                    -- | linkedin-jobspy | remoteineurope | websearch — …
  *     title      TEXT,
  *     company    TEXT,
@@ -104,9 +106,18 @@ const FETCH_TIMEOUT_MS = 10_000;
 // ── API detection ───────────────────────────────────────────────────
 
 function detectApi(company) {
-  // Greenhouse: explicit api field
-  if (company.api && company.api.includes("greenhouse")) {
-    return { type: "greenhouse", url: company.api };
+  // 1. Explicit api: field wins — sniff the URL pattern.
+  //    Lets custom domains (e.g. careers.britepayments.com/jobs.json) work
+  //    without baking another host pattern into the careers_url matcher.
+  if (company.api) {
+    const a = company.api;
+    if (a.includes("greenhouse.io")) return { type: "greenhouse", url: a };
+    if (a.includes("api.ashbyhq.com")) return { type: "ashby", url: a };
+    if (a.includes("api.lever.co")) return { type: "lever", url: a };
+    if (a.includes(".recruitee.com")) return { type: "recruitee", url: a };
+    if (a.includes("join.team")) return { type: "join_team", url: a };
+    if (/\/jobs\.json(?:$|\?)/.test(a)) return { type: "teamtailor", url: a };
+    // Unknown api: shape — fall through to careers_url detection.
   }
 
   const url = company.careers_url || "";
@@ -131,10 +142,31 @@ function detectApi(company) {
 
   // Greenhouse EU boards
   const ghEuMatch = url.match(/job-boards(?:\.eu)?\.greenhouse\.io\/([^/?#]+)/);
-  if (ghEuMatch && !company.api) {
+  if (ghEuMatch) {
     return {
       type: "greenhouse",
       url: `https://boards-api.greenhouse.io/v1/boards/${ghEuMatch[1]}/jobs`,
+    };
+  }
+
+  // Teamtailor: {tenant}.teamtailor.com (custom domains use explicit api:)
+  const ttMatch = url.match(/https?:\/\/([^/]+\.teamtailor\.com)/);
+  if (ttMatch) {
+    return { type: "teamtailor", url: `https://${ttMatch[1]}/jobs.json` };
+  }
+
+  // Recruitee: {tenant}.recruitee.com (custom domains use explicit api:)
+  const recruiteeMatch = url.match(/https?:\/\/([^/]+\.recruitee\.com)/);
+  if (recruiteeMatch) {
+    return { type: "recruitee", url: `https://${recruiteeMatch[1]}/api/offers/` };
+  }
+
+  // join.team: aggregator with per-team boards at join.team/{slug}/
+  const joinTeamMatch = url.match(/https?:\/\/join\.team\/([^/?#]+)/);
+  if (joinTeamMatch) {
+    return {
+      type: "join_team",
+      url: `https://join.team/api/teams/${joinTeamMatch[1]}/jobs/jobs`,
     };
   }
 
@@ -173,10 +205,62 @@ function parseLever(json, companyName) {
   }));
 }
 
+function parseRecruitee(json, companyName) {
+  const offers = (json.offers || []).filter(
+    (o) => !o.status || o.status === "published",
+  );
+  return offers.map((o) => ({
+    title: o.title || "",
+    url: o.careers_url || o.careers_apply_url || "",
+    company: companyName,
+    location:
+      o.location || [o.city, o.country].filter(Boolean).join(", ") || "",
+  }));
+}
+
+// Teamtailor publishes a JSON Feed v1 at <career-site>/jobs.json: each
+// item has {title, id, url, date_published, summary, tags}. Location is
+// not part of the feed; the downstream per-JD gate handles it.
+function parseTeamtailor(json, companyName) {
+  const items = json.items || [];
+  return items.map((it) => ({
+    title: it.title || "",
+    url: it.url || "",
+    company: companyName,
+    location: "",
+  }));
+}
+
+// join.team has an undocumented JSON API at
+//   /api/teams/{team-slug}/jobs/jobs → { jobs: [{ id, title, slug, location,
+//   location_option, position, status }] }
+// status === 1 means published. The team slug isn't in the JSON payload, so
+// we derive it from the api URL; the canonical job URL is
+// https://join.team/{team-slug}/jobs/{job-slug}.
+function parseJoinTeam(json, companyName, apiUrl) {
+  const slugMatch = (apiUrl || "").match(
+    /\/api\/teams\/([^/]+)\/jobs\/jobs(?:$|\?)/,
+  );
+  const teamSlug = slugMatch ? slugMatch[1] : "";
+  const jobs = (json.jobs || []).filter((j) => j.status === 1);
+  return jobs.map((j) => ({
+    title: j.title || "",
+    url:
+      teamSlug && j.slug
+        ? `https://join.team/${teamSlug}/jobs/${j.slug}`
+        : "",
+    company: companyName,
+    location: j.location || j.location_option || "",
+  }));
+}
+
 const PARSERS = {
   greenhouse: parseGreenhouse,
   ashby: parseAshby,
   lever: parseLever,
+  recruitee: parseRecruitee,
+  teamtailor: parseTeamtailor,
+  join_team: parseJoinTeam,
 };
 
 // ── Fetch with timeout ──────────────────────────────────────────────
@@ -306,7 +390,7 @@ async function main() {
     const { type, url } = company._api;
     try {
       const json = await fetchJson(url);
-      const jobs = PARSERS[type](json, company.name);
+      const jobs = PARSERS[type](json, company.name, url);
       totalFound += jobs.length;
 
       for (const job of jobs) {

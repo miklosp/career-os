@@ -10,19 +10,32 @@ Levels 1 (ATS APIs), 2 (LinkedIn via JobSpy), 2b (remoteineurope.com), and 2c (h
 
 ## Recommended execution
 
-Run as a background subagent so scan output doesn't consume main context. The agent's whole job is orchestration: run the script, read its output line, run the Level 3 pass.
+**Do not wrap Levels 1/2/2b/2c in a subagent — they are zero-token.** Run `node scan.mjs` directly as a background Bash from the parent session (Claude Code's `run_in_background: true`). The harness sends a completion notification on process exit; that *is* the end signal. The script also emits machine-readable markers (`DISPATCH_URLS=[...]`, optional `SCAN_FATAL=...`) so a tiny `grep` over the captured output yields everything the parent session needs without pulling the full stdout into context.
+
+Earlier versions used a wrapping subagent. That pattern fails because there is no LLM work to wrap: an agent kicking off the script in *its own* background and waiting on a `Monitor` stream ends its turn before the script finishes, with no wake signal to resume it.
+
+Level 3 (WebSearch + liveness checks) is the only LLM-driven part and stays inline in the parent session — it's bounded by `enabled: true` queries in `config/portals.yml`.
 
 ## Core orchestration
 
-1. **Run the scanner:**
+1. **Run the scanner** as a background Bash from the parent session:
 
    ```bash
-   node scan.mjs
+   node scan.mjs > /tmp/career-ops-scan.log 2>&1
    ```
 
    This does Levels 1/2/2b/2c zero-token: fetch ATS feeds + LinkedIn (JobSpy) + remoteineurope + hiring.cafe, apply the title filter, dedup against `data/scan-history.db` (auto-created, auto-migrates the legacy `.tsv`), write new rows, prefetch LinkedIn JDs into `data/jds/` + `Fetched` rows in `data/applications.md`. The employer ATS URL is resolved at scan time only when `LINKEDIN_LI_AT` + `LINKEDIN_JSESSIONID` are in `.env` (the free authenticated Voyager path); otherwise the LinkedIn URL is stored and ATS resolution defers to apply-time.
 
-2. **Parse stdout:** read the `DISPATCH_URLS=[...]` line — a JSON array of canonical employer ATS URLs (Levels 1/2/2b/2c). Printed only when non-empty and not `--dry-run`.
+   End signal: process exit (notified automatically by the harness). The script always prints the per-level summary first, then `SCAN_FATAL=...` (if any), then `DISPATCH_URLS=[...]` (when non-empty and not `--dry-run`).
+
+2. **Read only the markers** when the background Bash completes:
+
+   ```bash
+   grep -E "^(DISPATCH_URLS=|SCAN_FATAL=)" /tmp/career-ops-scan.log
+   tail -40 /tmp/career-ops-scan.log   # per-level summary for the user
+   ```
+
+   Avoid `cat`-ing the full log — the per-URL listing can be hundreds of lines.
 
 3. **Dispatch:** spawn **one background `auto-pipeline` agent per URL** (`modes/auto-pipeline.md`), bounded to ≤ 3 concurrent. Pre-fetched LinkedIn JDs dispatch as their canonical URL (resolved employer ATS URL when Voyager ran, otherwise the LinkedIn URL); the agent's `_fetch.md` Step 1 detects the existing `data/jds/` entry with `Fetched` status and skips straight to gate + score (no double-fetch).
 

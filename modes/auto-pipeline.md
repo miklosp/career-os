@@ -60,10 +60,24 @@ helper and never load `_fetch.md` at all.
 
 #### Step 2 — Location gate
 
-Follow `modes/_location-gate.md`. If it returns `SKIP:<rule-id>:
-"<evidence>"`, the gate has already updated the applications.md row to
-`Skipped-Location` with the quoted evidence in Notes. Stop here. No
-report, no TSV.
+Two stages — deterministic first, LLM only when needed.
+
+**2a. Deterministic short-circuit (zero tokens):**
+
+```bash
+node lib/location-gate.mjs {NUM}
+```
+
+Exit codes:
+- `0` → ALLOW (proceed to Step 3 — skip 2b, no LLM gate needed)
+- `10` → SKIP applied. The script has already updated the applications.md row to `Skipped-Location` with the rule-id + quoted Location as evidence. **Stop here. No report, no TSV.**
+- `20` → NEEDS_LLM (no deterministic answer — fall through to 2b)
+
+The deterministic gate fires on structured `**Remote scope:** onsite:City` / `hybrid:City` headers (LinkedIn Voyager populates these). It does NOT inspect JD body language — that is 2b's job.
+
+**2b. LLM gate (only on exit 20):**
+
+Follow `modes/_location-gate.md`. If it returns `SKIP:<rule-id>: "<evidence>"`, the gate has already updated the applications.md row to `Skipped-Location` with the quoted evidence in Notes. Stop here. No report, no TSV.
 
 #### Step 3 — Score
 

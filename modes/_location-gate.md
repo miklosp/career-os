@@ -4,6 +4,15 @@ Runs after `modes/_fetch.md` has saved a JD under `data/jds/{NUM}-*.md` and befo
 `modes/_eval.md` spends tokens scoring it. Cheap, deterministic, honest —
 when a role can't work geographically, skip it with the evidence quoted.
 
+**Deterministic short-circuit first.** `auto-pipeline.md` calls
+`node lib/location-gate.mjs {NUM}` before this LLM gate runs. That script
+fires SKIP for any JD whose `**Remote scope:** onsite:City` / `hybrid:City`
+header points at a country outside `home_country` (and not literally listed
+in `remote_allowed_scopes`). If it returns ALLOW or SKIP, this file is not
+read. It only falls through to this LLM gate on `NEEDS_LLM` — i.e. when the
+JD's structured scope is missing or ambiguous and the body needs human-style
+judgment for Rules 3 / 4 / 5 / 6 below.
+
 ## Input
 
 - `NUM` from the fetch stage
@@ -26,7 +35,7 @@ If present, pull these fields (with defaults in case of partial config):
 | `us_work_authorization` (default true) | rule 3 |
 | `relocation_open` (default false) | rule 4 |
 | `remote_allowed_scopes` (default `[home_country]`) | rules 1, 6 |
-| `skip_on` (list of rule ids) | which rules are enabled |
+| `skip_on` (list of rule ids) | which rules are enabled (ids: `remote_scope_excludes_home_country`, `onsite_outside_home_country`, `us_work_auth_required`, `onsite_and_relocation_required`, `timezone_outside_home_tolerance`, `residency_required_outside_home_country`, `hybrid_outside_home_country`) |
 
 ## Step 2 — Read the JD header
 
@@ -59,9 +68,9 @@ If the posting is `full-remote-global` or `full-remote-region:{X}` where `{X}` i
 
 ### Rule 2: `onsite_outside_home_country`
 
-Fail if `Remote scope` starts with `onsite:` and the city is outside `home_country`. Hybrid-remote with occasional office visits does NOT trigger this rule.
+Fail if `Remote scope` starts with `onsite:` and the city is outside `home_country`.
 
-Evidence: quote the exact sentence from the JD that names the on-site city.
+Evidence: quote the exact sentence from the JD that names the on-site city, or the `**Remote scope:** onsite:{city}` header line if the body is silent.
 
 ### Rule 3: `us_work_auth_required`
 
@@ -87,6 +96,12 @@ Examples with `home_timezone: CET` and `timezone_tolerance_hours: 1`:
 - `"Any US timezone"` → PST/MST/CST/EST, range CET-9 to CET-6 → SKIP
 - `"Americas timezones"` → SKIP
 - `unspecified` → pass (no evidence to act on)
+
+### Rule 7: `hybrid_outside_home_country`
+
+Fail if `Remote scope` starts with `hybrid:` and the city is outside `home_country` and the city is not within a region listed in `remote_allowed_scopes`. Hybrid requires recurring office attendance — not viable for a candidate based outside `home_country` unless `relocation_open: true`.
+
+Evidence: the `**Remote scope:** hybrid:{city}` header line, or the JD sentence naming the office and the hybrid expectation.
 
 ### Rule 6: `residency_required_outside_home_country`
 

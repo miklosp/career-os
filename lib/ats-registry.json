@@ -1,5 +1,90 @@
 {
   "version": 1,
-  "_note": "Learned host\u2192handler map for lib/fetch-jd.mjs. Machine-grown via `node lib/fetch-jd.mjs --learn ...`, NOT hand-edited by the user. Committed on purpose: it is accumulated fetch wisdom that should pass to whoever picks this up next, not per-user state. Each entry maps an otherwise-unrecognised host (or regex) to one of the built-in handlers in fetch-jd.mjs, plus any params the handler can.t pull from the URL (e.g. an org/tenant slug). Consulted before the built-in URL matchers.",
-  "entries": []
+  "_note": "Learned host→handler map for lib/fetch-jd.mjs. Machine-grown via `node lib/fetch-jd.mjs --learn ...`, NOT hand-edited by the user. Committed on purpose: it is accumulated fetch wisdom that should pass to whoever picks this up next, not per-user state. Each entry maps an otherwise-unrecognised host (or regex) to one of the built-in handlers in fetch-jd.mjs, plus any params the handler can.t pull from the URL (e.g. an org/tenant slug). Consulted before the built-in URL matchers.",
+  "entries": [
+    {
+      "match": "proxify.io",
+      "matchType": "host",
+      "handler": "teamtailor",
+      "params": {
+        "tenantHost": "jobs.proxify.io"
+      },
+      "note": "proxify.io careers page is Teamtailor; job IDs in path match jobs.proxify.io/jobs/{id}-*",
+      "source": "learned",
+      "added": "2026-05-18"
+    },
+    {
+      "match": "weaviate.io",
+      "matchType": "host",
+      "handler": "ashby",
+      "params": {
+        "org": "weaviate",
+        "id_param": "ashby_jid"
+      },
+      "note": "Weaviate careers page embeds Ashby job board; ?ashby_jid={uuid} maps to api.ashbyhq.com/posting-api/job-board/weaviate",
+      "source": "learned",
+      "added": "2026-05-19"
+    },
+    {
+      "match": "jobs.elastic.co",
+      "matchType": "host",
+      "handler": "greenhouse",
+      "params": {
+        "org": "elastic"
+      },
+      "note": "ongig front-end over Greenhouse board; ongig job id == gh job id",
+      "source": "learned",
+      "added": "2026-06-03"
+    },
+    {
+      "match": "jobb.enklare.se",
+      "matchType": "host",
+      "handler": "teamtailor",
+      "params": {},
+      "note": "Enklare/E2E Group Teamtailor custom domain",
+      "source": "learned",
+      "added": "2026-06-04"
+    },
+    {
+      "match": "jobs.deel.com",
+      "matchType": "host",
+      "handler": "firecrawl",
+      "params": {},
+      "note": "Deel custom ATS (Next.js SPA). No __NEXT_DATA__, but embeds full JobPosting JSON-LD in page head — xh GET + python3 JSON-LD extraction works. URL pattern: /deel/job-details/{uuid}/overview. No auth required.",
+      "source": "learned",
+      "added": "2026-06-04"
+    },
+    {
+      "match": "slice.careers",
+      "matchType": "host",
+      "handler": "greenhouse",
+      "params": {
+        "org": "slice"
+      },
+      "note": "Squarespace careers page fronting Greenhouse board for Slice (pizzeria platform)",
+      "source": "learned",
+      "added": "2026-06-04"
+    },
+    {
+      "match": "jobs.tetrapak.com",
+      "matchType": "host",
+      "handler": "xh",
+      "params": {
+        "ats": "sap-successfactors-j2w",
+        "followRedirects": true
+      },
+      "note": "SAP SuccessFactors Jobs2Web (j2w) static HTML. xh GET + HTML extraction works (no JS rendering needed). URL shape: /job/{slug}/{job-id}-{locale}/. Redirects from external IDs (e.g. 1398845233) to internal id-locale form (99061-en_GB). No JSON-LD. Needs a j2w handler in fetch-jd.mjs for zero-token support.",
+      "source": "learned",
+      "added": "2026-06-04"
+    },
+    {
+      "match": "jobs.starstableentertainment.com",
+      "matchType": "host",
+      "handler": "teamtailor",
+      "params": {},
+      "note": "Star Stable Entertainment Teamtailor career site",
+      "source": "learned",
+      "added": "2026-06-04"
+    }
+  ]
 }
