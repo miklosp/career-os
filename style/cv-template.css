@@ -1,25 +1,7 @@
-/* --- Fonts --- */
+/* --- cv-template.css — dense, structured CV.
+   Shared fonts + body base live in base.css. --- */
 
-@font-face {
-  font-family: "Inter";
-  src: url("fonts/Inter.ttf");
-  font-weight: normal;
-  font-style: normal;
-}
-
-@font-face {
-  font-family: "Inter";
-  src: url("fonts/Inter-Italic.ttf");
-  font-weight: normal;
-  font-style: italic;
-}
-
-@font-face {
-  font-family: "JetBrains Mono";
-  src: url("fonts/JetBrainsMono.ttf");
-  font-weight: normal;
-  font-style: normal;
-}
+@import "base.css";
 
 /* --- Page ---
    @page size is injected at render time by render-cv-pdf.py based on --format. */
@@ -31,10 +13,8 @@
 /* --- Base --- */
 
 body {
-  font-family: "Inter", sans-serif;
   font-size: 9.5pt;
   line-height: 1.4;
-  color: #222222;
 }
 
 /* --- Headings --- */

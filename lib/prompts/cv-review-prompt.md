@@ -84,7 +84,7 @@ The generator emits its own `<bridges>` list. You receive the generated CV with 
 - Surface NEW bridges the generator missed (JD-vocabulary substitutions you'd recommend offering)
 - DEMOTE generator bridges that are actually fabrications (the conservative wording is already in the CV, so you don't need to flag the CV — but if the generator should have flagged a more aggressive substitution, surface it as `fabricated` or `stretched`)
 
-For your output: emit a `bridge` finding only when you want to OFFER the user a JD-vocabulary upgrade. The `generated_text` is the conservative phrase that's currently in the CV; the `proposed_fix` is the JD-vocabulary upgrade the user can accept.
+For your output: emit a `bridge` finding only when you want to OFFER the user a JD-vocabulary upgrade. The `generated_text` is the conservative phrase that's currently in the CV; the `replacement` is the JD-vocabulary upgrade the user can accept.
 
 ## Output format
 
@@ -100,7 +100,7 @@ Output ONLY a JSON object matching the schema below. No prose, no markdown code 
       "generated_text": "string — EXACT verbatim substring from generated CV",
       "source_cv_evidence": "string — supporting text from source CV / story bank / Block-A Match, or 'NONE' if nothing supports it",
       "issue": "string — one-sentence explanation",
-      "proposed_fix": "string — replacement text (see semantics below)"
+      "replacement": "string — the EXACT verbatim text spliced into the CV in place of generated_text. A literal drop-in: no surrounding quotes, no 'Could upgrade to…', no rationale, no evidence ids. \"\" means delete. See semantics below."
     }
   ],
   "summary": {
@@ -114,13 +114,16 @@ Output ONLY a JSON object matching the schema below. No prose, no markdown code 
 
 ## Critical rules for output
 
-- `generated_text` MUST be a verbatim substring of the generated CV. The dashboard will literally string-search and replace it.
-- Keep `generated_text` minimal — quote just the offending or bridgeable phrase, not entire bullets.
-- **`proposed_fix` semantics depend on severity:**
-  - For `fabricated` / `stretched`: the fix is the conservative downgrade the user should accept by default. Empty string `""` means "delete generated_text entirely."
-  - For `bridge`: the fix is the JD-vocabulary upgrade the user can accept if they want stronger ATS alignment. The user's default is to KEEP the generated_text (conservative); accepting the fix upgrades to JD vocabulary.
+- `generated_text` and `replacement` are a mechanical find/replace pair: the consumer runs `cv.replace(generated_text, replacement)` literally. Both must be exact.
+- `generated_text` MUST be a verbatim substring of the generated CV. Keep it minimal — just the offending or bridgeable phrase, not the whole bullet.
+- **`replacement` is the literal text spliced in, NOT a description of the fix.** Output only the words that should appear in the CV. No surrounding quotes, no "Could upgrade to…", no "— defensible from <id>", no rationale. The explanation belongs in `issue`; the supporting evidence id belongs in `source_cv_evidence`.
+  - WRONG — `"replacement": "Could upgrade to 'Wrote SQL queries to extract product usage metrics' — defensible from secberus-b6."`
+  - RIGHT — `"replacement": "Wrote SQL queries to extract product usage metrics"`, with `"source_cv_evidence": "secberus-b6: …"` and the reasoning in `"issue"`.
+- **`replacement` semantics depend on severity:**
+  - For `fabricated` / `stretched`: the conservative downgrade the user should accept by default. Empty string `""` means "delete generated_text entirely."
+  - For `bridge`: the JD-vocabulary upgrade the user can accept if they want stronger ATS alignment. The user's default is to KEEP generated_text (conservative); accepting swaps in `replacement`.
 - For removals: include surrounding punctuation in `generated_text` so the deletion leaves clean text behind.
-- A `proposed_fix` that re-introduces a fabrication or expands a claim further is NOT acceptable. Reframe down to what the source supports, or delete.
+- A `replacement` that re-introduces a fabrication or expands a claim further is NOT acceptable. Reframe down to what the source supports, or delete.
 - Only include findings that are FABRICATED, STRETCHED, or BRIDGE. Do not include supported content.
 - **`overall_verdict` rule:**
   - `do_not_send` if any `fabricated` findings exist

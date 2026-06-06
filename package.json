@@ -16,6 +16,7 @@
     "cv-migrate": "node lib/cv-md-to-json.mjs",
     "cv-build": "node lib/cv-json-to-md.mjs",
     "cv-check": "node lib/cv-json-to-md.mjs --check",
+    "cv-project": "node lib/cv-project.mjs",
     "kw-analysis": "node lib/keyword-frequency.mjs"
   },
   "keywords": [

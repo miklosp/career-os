@@ -130,7 +130,7 @@ Output exactly three parts, in order:
       "source_type": "cv | story_bank | notes | report",
       "source_cv_evidence": "string — quote from the cited source supporting the conservative version",
       "issue": "string — one sentence: why this is a bridge",
-      "proposed_fix": "string — the JD-vocabulary upgrade the user can accept; empty if no honest upgrade"
+      "replacement": "string — the literal JD-vocabulary upgrade text spliced in place of generated_text (no surrounding quotes, no prose, no rationale, no evidence ids); empty string if there is no honest upgrade"
     }
   ]
 }
@@ -150,6 +150,7 @@ Output exactly three parts, in order:
 
 Rules for `<bridges>`:
 - `generated_text` MUST be a verbatim substring of the CV markdown you wrote, **excluding** the trailing `[src: id]` tag. The reviewer string-searches it.
+- `generated_text` and `replacement` are a literal find/replace pair. `replacement` is spliced in verbatim — output only the upgraded phrase, no "could upgrade to", no surrounding quotes, no evidence ids. The reason goes in `issue`, the backing evidence in `source_cv_evidence`.
 - One bridge per substitution. Two substitutions in one bullet → two entries.
 - `source_type` records which evidence class the conservative version rests on (`notes` for any note-derived claim — mandatory).
 - Only genuine bridges. Adjacent fabrications go into the CV as the conservative version with no bridge.

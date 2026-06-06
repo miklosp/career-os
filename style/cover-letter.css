@@ -1,40 +1,15 @@
-@font-face {
-  font-family: "Inter";
-  src: url("fonts/Inter.ttf");
-  font-weight: normal;
-  font-style: normal;
-}
+/* --- cover-letter.css — airy, single-page cover letter.
+   Shared fonts + body base live in base.css. --- */
 
-@font-face {
-  font-family: "Inter";
-  src: url("fonts/Inter.ttf");
-  font-weight: 600;
-  font-style: normal;
-}
-
-@font-face {
-  font-family: "Inter";
-  src: url("fonts/Inter-Italic.ttf");
-  font-weight: normal;
-  font-style: italic;
-}
-
-@font-face {
-  font-family: "JetBrains Mono";
-  src: url("fonts/JetBrainsMono.ttf");
-  font-weight: normal;
-  font-style: normal;
-}
+@import "base.css";
 
 @page {
   margin: 2.5cm;
 }
 
 body {
-  font-family: "Inter", sans-serif;
   font-size: 11pt;
   line-height: 1.5;
-  color: #222222;
 }
 
 p {

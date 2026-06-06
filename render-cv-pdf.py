@@ -141,6 +141,7 @@ def to_plain_text(md_text: str) -> str:
     """Deterministic markdown → plain text for paste-into-form ATS boxes."""
     t = expand_fenced_divs(md_text)
     t = re.sub(r"<div class=\"\w+\">|</div>", "", t)
+    t = re.sub(r"<br\s*/?>", "\n", t)                           # line breaks
     t = re.sub(r"^#{1,6}\s*", "", t, flags=re.MULTILINE)        # headings
     t = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", r"\1", t)            # links → text
     t = re.sub(r"\*\*([^*]+)\*\*", r"\1", t)                    # bold

@@ -132,7 +132,7 @@ Classify each question:
 
 ## Step 4 — Generate answers
 
-**Cover letter:** if the form allows one (free-text field or PDF upload), ALWAYS include it. Same visual design as the CV. Map JD quotes to proof points. One page max.
+**Cover letter:** if the form allows one (free-text field or PDF upload), ALWAYS include it. Generate it via `modes/cover-letter.md` for application #NUM — that mode drafts the letter, runs the voice + scrub passes, and renders the PDF (plus a paste-ready `.txt`) with `style/cover-letter.css`. Upload the `.pdf` to an upload field, or paste the `.txt` into a free-text field. Do not draft the letter inline here — `cover-letter.md` is the single source of cover-letter logic.
 
 **MANDATORY: every free-text answer goes through the two passes below before it enters the form.** Short factual fields (name, phone, LinkedIn URL, Yes/No, dropdowns) are exempt. Everything the reviewer actually reads — cover notes, "why us", "why you", "tell us about a project", custom long-answer questions — gets both passes. The standards are in-repo; this mode is self-contained and depends on no external skill.
 

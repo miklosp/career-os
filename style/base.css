@@ -1,0 +1,30 @@
+/* --- base.css ---
+   Shared fonts + body base for every career-ops PDF. Imported by
+   cv-template.css and cover-letter.css; per-document typography (size,
+   margins, spacing) lives in those files. Edit brand fonts here, once. */
+
+@font-face {
+  font-family: "Inter";
+  src: url("fonts/Inter.ttf");
+  font-weight: normal;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: "Inter";
+  src: url("fonts/Inter-Italic.ttf");
+  font-weight: normal;
+  font-style: italic;
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("fonts/JetBrainsMono.ttf");
+  font-weight: normal;
+  font-style: normal;
+}
+
+body {
+  font-family: "Inter", sans-serif;
+  color: #222222;
+}
