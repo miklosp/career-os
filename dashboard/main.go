@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"flag"
 	"fmt"
@@ -27,6 +28,7 @@ const (
 	viewReport
 	viewProgress
 	viewFactCheck
+	viewCV
 )
 
 type appModel struct {
@@ -34,6 +36,7 @@ type appModel struct {
 	viewer          screens.ViewerModel
 	progress        screens.ProgressModel
 	factcheck       screens.FactCheckModel
+	cv              screens.CVModel
 	state           viewState
 	careerOpsPath   string
 	theme           theme.Theme
@@ -78,6 +81,9 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if m.state == viewFactCheck {
 			m.factcheck.Resize(msg.Width, msg.Height)
+		}
+		if m.state == viewCV {
+			m.cv.Resize(msg.Width, msg.Height)
 		}
 		pm, cmd := m.pipeline.Update(msg)
 		m.pipeline = pm
@@ -185,6 +191,28 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.state = viewPipeline
 		return m, nil
 
+	case screens.PipelineOpenCVMsg:
+		m.cv = screens.NewCVModel(
+			m.theme,
+			msg.CareerOpsPath,
+			m.pipeline.TabCounts(),
+			m.pipeline.Width(), m.pipeline.Height(),
+		)
+		m.state = viewCV
+		return m, nil
+
+	case screens.CVClosedMsg:
+		// q/Esc → restore the tab the user opened CV from. left/right →
+		// cycle off the CV slot directly so the user crosses through into
+		// the neighbouring filter tab without first bouncing off prevTab.
+		if msg.NavDirection == 0 {
+			m.pipeline.RestoreFromCVTab()
+		} else {
+			m.pipeline.NavigateFromCVTab(msg.NavDirection)
+		}
+		m.state = viewPipeline
+		return m, nil
+
 	case screens.PipelineGenerateCVMsg:
 		key := msg.App.ReportPath
 		if key == "" {
@@ -213,7 +241,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmd := exec.Command("node", "lib/generate-cv-llm.mjs",
 				"--jd", jdFile, "--format", "a4", "--no-pdf")
 			cmd.Dir = careerOpsPath
-			err := cmd.Run()
+			err := runSpawn(cmd, careerOpsPath, "cv-generate")
 			return screens.CVGenDoneMsg{AppKey: key, CVPath: cvPath, Err: err}
 		}
 		return m, tea.Batch(startedCmd, bgCmd)
@@ -241,7 +269,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmd := exec.Command("node", "lib/cv-fact-check.mjs",
 				"--review-only", cvPath)
 			cmd.Dir = careerOpsPath
-			err := cmd.Run()
+			err := runSpawn(cmd, careerOpsPath, "cv-review")
 			return screens.ReviewDoneMsg{AppKey: appKey, Err: err}
 		}
 		return m, tea.Batch(pcmd, reviewStartedCmd, reviewCmd)
@@ -305,7 +333,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if key == "" {
 			key = msg.App.Company + "/" + msg.App.Role
 		}
-		title := fmt.Sprintf("%s · %s", msg.App.Company, msg.App.Role)
+		title := fmt.Sprintf("#%s · %s · %s", num, msg.App.Company, msg.App.Role)
 		m.factcheck = screens.NewFactCheckModel(
 			m.theme,
 			msg.CareerOpsPath, cvPath, reviewJSONPath, title, key,
@@ -327,7 +355,8 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		app := msg.App
 		cvPath := msg.CVPath
 		careerOpsPath := m.careerOpsPath
-		openAfter := msg.OpenReportAfter
+		// Finalizing returns to the dashboard, not the job report.
+		openAfter := false
 		renderRequest := func() tea.Msg {
 			return screens.RenderPDFRequestedMsg{
 				CareerOpsPath:   careerOpsPath,
@@ -358,7 +387,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				"--css", cssPath,
 				"--format", "a4")
 			cmd.Dir = careerOpsPath
-			err := cmd.Run()
+			err := runSpawn(cmd, careerOpsPath, "cv-pdf")
 			return pdfRenderResult{appKey: appKey, app: app, openAfter: openAfter, err: err}
 		}
 		return m, tea.Batch(pcmd, renderCmd)
@@ -537,6 +566,11 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.factcheck = fm
 			return m, cmd
 		}
+		if m.state == viewCV {
+			cm, cmd := m.cv.Update(msg)
+			m.cv = cm
+			return m, cmd
+		}
 		pm, cmd := m.pipeline.Update(msg)
 		m.pipeline = pm
 		return m, cmd
@@ -577,25 +611,19 @@ func (m appModel) View() string {
 		return m.progress.View()
 	case viewFactCheck:
 		return m.factcheck.View()
+	case viewCV:
+		return m.cv.View()
 	default:
 		return m.pipeline.View()
 	}
 }
 
-// reportNum extracts the 3-digit prefix from a report path like
-// "data/reports/064-legora-product-lead-core-growth-2026-04-17.md".
+// reportNum extracts the NUM prefix from a report path like
+// "data/reports/1085-zyte-ai-product-manager-owner-2026-06-04.md". The NUM is
+// a 3+ digit sequence, so this delegates to data.LeadingNum rather than
+// assuming exactly 3 digits.
 func reportNum(reportPath string) string {
-	name := filepath.Base(reportPath)
-	if len(name) < 3 {
-		return ""
-	}
-	prefix := name[:3]
-	for _, r := range prefix {
-		if r < '0' || r > '9' {
-			return ""
-		}
-	}
-	return prefix
+	return data.LeadingNum(reportPath)
 }
 
 // findJDFileByNum returns the data/jds/{NUM}-*.md file matching the given number.
@@ -780,6 +808,47 @@ func cmuxReachable() (string, bool) {
 // escaped via the standard '\'' idiom.
 func shellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}
+
+// runSpawn runs cmd capturing combined stdout+stderr. On failure it appends a
+// diagnostic block to <careerOpsPath>/output/customized-cvs/cvgen.log and
+// returns an error carrying the last non-empty output line, so a failed CV
+// step surfaces a real reason (in the log) instead of the dashboard's silent
+// red "PDF ✗".
+func runSpawn(cmd *exec.Cmd, careerOpsPath, label string) error {
+	var buf bytes.Buffer
+	cmd.Stdout = &buf
+	cmd.Stderr = &buf
+	runErr := cmd.Run()
+	if runErr == nil {
+		return nil
+	}
+	out := buf.String()
+	dir := filepath.Join(careerOpsPath, "output", "customized-cvs")
+	_ = os.MkdirAll(dir, 0o755)
+	if f, ferr := os.OpenFile(filepath.Join(dir, "cvgen.log"),
+		os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644); ferr == nil {
+		fmt.Fprintf(f, "\n=== %s · %s ===\n$ %s\n%s\n[error] %v\n",
+			time.Now().Format(time.RFC3339), label,
+			strings.Join(cmd.Args, " "), out, runErr)
+		f.Close()
+	}
+	if reason := lastNonEmptyLine(out); reason != "" {
+		return fmt.Errorf("%s: %s (%w)", label, reason, runErr)
+	}
+	return fmt.Errorf("%s: %w", label, runErr)
+}
+
+// lastNonEmptyLine returns the final non-blank line of s — the most useful
+// single line of a failed script's output for a one-line error.
+func lastNonEmptyLine(s string) string {
+	lines := strings.Split(strings.TrimRight(s, "\n"), "\n")
+	for i := len(lines) - 1; i >= 0; i-- {
+		if t := strings.TrimSpace(lines[i]); t != "" {
+			return t
+		}
+	}
+	return ""
 }
 
 func main() {

@@ -19,21 +19,7 @@ import (
 // given app — signalling that the user has not yet walked through the review.
 // Returns false for apps with no report or no derivable NUM.
 func hasPendingReview(careerOpsPath string, app model.CareerApplication) bool {
-	num := ""
-	name := filepath.Base(app.ReportPath)
-	if len(name) >= 3 {
-		prefix := name[:3]
-		allDigits := true
-		for _, r := range prefix {
-			if r < '0' || r > '9' {
-				allDigits = false
-				break
-			}
-		}
-		if allDigits {
-			num = prefix
-		}
-	}
+	num := data.LeadingNum(app.ReportPath)
 	if num == "" {
 		return false
 	}
@@ -197,6 +183,11 @@ const (
 	filterInterview = "interview"
 	filterSkip      = "skip"
 	filterProgress  = "progress"
+	// filterCV is a pseudo-tab that opens the full-screen CV editor rather
+	// than filtering applications. Navigating onto it via cycle keys
+	// (f/right/l, left/h) emits PipelineOpenCVMsg; main pushes viewCV and
+	// pops back to the previous tab on close (see RestoreFromCVTab).
+	filterCV = "cv"
 
 	// priorityThreshold is the minimum score for the PRIORITY tab.
 	priorityThreshold = 4.0
@@ -215,6 +206,7 @@ var pipelineTabs = []pipelineTab{
 	{filterInterview, "INTERVIEW"},
 	{filterSkip, "SKIP"},
 	{filterProgress, "PROGRESS"},
+	{filterCV, "CV"},
 }
 
 var sortCycle = []string{sortScore, sortDate, sortCompany, sortStatus}
@@ -236,34 +228,85 @@ type PipelineModel struct {
 	scrollOffset  int
 	sortMode      string
 	activeTab     int
-	viewMode      string // "grouped" or "flat"
-	width, height int
-	theme         theme.Theme
-	careerOpsPath string
-	reportCache   map[string]reportSummary
-	cvGenStatus   map[string]string // appKey → "started"|"done"|"error"
+	// prevTabBeforeCV stores the previously focused tab so RestoreFromCVTab
+	// can roll the visual highlight back when the user dismisses the CV
+	// editor. -1 means "no CV escape in flight".
+	prevTabBeforeCV int
+	viewMode        string // "grouped" or "flat"
+	width, height   int
+	theme           theme.Theme
+	careerOpsPath   string
+	reportCache     map[string]reportSummary
+	cvGenStatus     map[string]string // appKey → "started"|"done"|"error"
 	// Status picker sub-state
 	statusPicker bool
 	statusCursor int
+	// Search sub-state. searchEditing means the input bar is capturing keys.
+	// searchQuery may persist after Enter dismisses the bar; switching tabs
+	// or pressing Esc clears it.
+	searchEditing bool
+	searchQuery   string
 }
 
 // NewPipelineModel creates a new pipeline screen.
 func NewPipelineModel(t theme.Theme, apps []model.CareerApplication, metrics model.PipelineMetrics, careerOpsPath string, width, height int) PipelineModel {
 	m := PipelineModel{
-		apps:          apps,
-		metrics:       metrics,
-		sortMode:      sortScore,
-		activeTab:     0,
-		viewMode:      "grouped",
-		width:         width,
-		height:        height,
-		theme:         t,
-		careerOpsPath: careerOpsPath,
-		reportCache:   make(map[string]reportSummary),
-		cvGenStatus:   make(map[string]string),
+		apps:            apps,
+		metrics:         metrics,
+		sortMode:        sortScore,
+		activeTab:       0,
+		prevTabBeforeCV: -1,
+		viewMode:        "grouped",
+		width:           width,
+		height:          height,
+		theme:           t,
+		careerOpsPath:   careerOpsPath,
+		reportCache:     make(map[string]reportSummary),
+		cvGenStatus:     make(map[string]string),
 	}
 	m.applyFilterAndSort()
 	return m
+}
+
+// RestoreFromCVTab moves activeTab off the CV pseudo-tab back to whatever was
+// focused before opening the editor. Idempotent: a no-op when the current
+// tab is anything else.
+func (m *PipelineModel) RestoreFromCVTab() {
+	if pipelineTabs[m.activeTab].filter != filterCV {
+		return
+	}
+	if m.prevTabBeforeCV >= 0 && m.prevTabBeforeCV < len(pipelineTabs) {
+		m.activeTab = m.prevTabBeforeCV
+	} else {
+		m.activeTab = 0
+	}
+	m.prevTabBeforeCV = -1
+	m.applyFilterAndSort()
+	m.cursor = 0
+	m.scrollOffset = 0
+}
+
+// NavigateFromCVTab cycles off the CV tab in the given direction (-1 = left,
+// +1 = right), skipping the CV slot itself so the pipeline always lands on a
+// real filter tab. Called by main on CVClosedMsg when the user used left/right
+// to leave the editor — distinct from q/Esc which restores via RestoreFromCVTab.
+func (m *PipelineModel) NavigateFromCVTab(dir int) {
+	if pipelineTabs[m.activeTab].filter != filterCV {
+		return
+	}
+	if dir == 0 {
+		return
+	}
+	for {
+		m.activeTab = (m.activeTab + dir + len(pipelineTabs)) % len(pipelineTabs)
+		if pipelineTabs[m.activeTab].filter != filterCV {
+			break
+		}
+	}
+	m.prevTabBeforeCV = -1
+	m.applyFilterAndSort()
+	m.cursor = 0
+	m.scrollOffset = 0
 }
 
 // Init implements tea.Model.
@@ -482,6 +525,9 @@ func (m PipelineModel) Update(msg tea.Msg) (PipelineModel, tea.Cmd) {
 		if m.statusPicker {
 			return m.handleStatusPicker(msg)
 		}
+		if m.searchEditing {
+			return m.handleSearchInput(msg)
+		}
 		return m.handleKey(msg)
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
@@ -578,20 +624,40 @@ func (m PipelineModel) handleKey(msg tea.KeyMsg) (PipelineModel, tea.Cmd) {
 		m.cursor = 0
 		m.scrollOffset = 0
 
-	case "f", "right", "l":
+	case "f":
+		// Open the search input. Existing query (if any) is preserved so the
+		// user can refine; Esc clears it.
+		m.searchEditing = true
+		return m, nil
+
+	case "right", "l":
+		prev := m.activeTab
 		m.activeTab++
 		if m.activeTab >= len(pipelineTabs) {
 			m.activeTab = 0
 		}
+		if pipelineTabs[m.activeTab].filter == filterCV {
+			m.prevTabBeforeCV = prev
+			path := m.careerOpsPath
+			return m, func() tea.Msg { return PipelineOpenCVMsg{CareerOpsPath: path} }
+		}
+		m.clearSearch()
 		m.applyFilterAndSort()
 		m.cursor = 0
 		m.scrollOffset = 0
 
 	case "left", "h":
+		prev := m.activeTab
 		m.activeTab--
 		if m.activeTab < 0 {
 			m.activeTab = len(pipelineTabs) - 1
 		}
+		if pipelineTabs[m.activeTab].filter == filterCV {
+			m.prevTabBeforeCV = prev
+			path := m.careerOpsPath
+			return m, func() tea.Msg { return PipelineOpenCVMsg{CareerOpsPath: path} }
+		}
+		m.clearSearch()
 		m.applyFilterAndSort()
 		m.cursor = 0
 		m.scrollOffset = 0
@@ -649,6 +715,7 @@ func (m PipelineModel) handleKey(msg tea.KeyMsg) (PipelineModel, tea.Cmd) {
 				break
 			}
 		}
+		m.clearSearch()
 		m.applyFilterAndSort()
 		m.cursor = 0
 		m.scrollOffset = 0
@@ -763,6 +830,53 @@ func (m PipelineModel) handleStatusPicker(msg tea.KeyMsg) (PipelineModel, tea.Cm
 	return m, nil
 }
 
+// handleSearchInput captures keys while the search input is focused. Esc
+// clears the query and exits the bar; Enter commits and exits the bar while
+// keeping the filter active; printable runes/backspace edit the query and
+// re-narrow the visible rows live.
+func (m PipelineModel) handleSearchInput(msg tea.KeyMsg) (PipelineModel, tea.Cmd) {
+	switch msg.String() {
+	case "esc":
+		m.searchEditing = false
+		m.searchQuery = ""
+		m.applyFilterAndSort()
+		m.cursor = 0
+		m.scrollOffset = 0
+		return m, m.loadCurrentReport()
+
+	case "enter":
+		m.searchEditing = false
+		return m, nil
+
+	case "backspace":
+		if r := []rune(m.searchQuery); len(r) > 0 {
+			m.searchQuery = string(r[:len(r)-1])
+			m.applyFilterAndSort()
+			m.cursor = 0
+			m.scrollOffset = 0
+			return m, m.loadCurrentReport()
+		}
+		return m, nil
+
+	default:
+		if len(msg.Runes) == 0 {
+			return m, nil
+		}
+		m.searchQuery += string(msg.Runes)
+		m.applyFilterAndSort()
+		m.cursor = 0
+		m.scrollOffset = 0
+		return m, m.loadCurrentReport()
+	}
+}
+
+// clearSearch resets search state without re-applying the filter (the caller
+// runs applyFilterAndSort itself).
+func (m *PipelineModel) clearSearch() {
+	m.searchEditing = false
+	m.searchQuery = ""
+}
+
 func (m PipelineModel) loadCurrentReport() tea.Cmd {
 	app, ok := m.CurrentApp()
 	if !ok || app.ReportPath == "" {
@@ -786,8 +900,8 @@ func (m *PipelineModel) applyFilterAndSort() {
 	for _, app := range m.apps {
 		norm := data.NormalizeStatus(app.Status)
 		switch currentFilter {
-		case filterProgress:
-			// Pseudo-tab — opens the progress screen, never lists rows.
+		case filterProgress, filterCV:
+			// Pseudo-tabs — open dedicated screens, never list rows.
 		case filterPriority:
 			if norm == filterEvaluated && app.Score >= priorityThreshold {
 				filtered = append(filtered, app)
@@ -801,6 +915,19 @@ func (m *PipelineModel) applyFilterAndSort() {
 				filtered = append(filtered, app)
 			}
 		}
+	}
+
+	// Narrow further by the search query (case-insensitive substring against
+	// company name or 3-digit ID). Empty query is a no-op.
+	if q := strings.ToLower(strings.TrimSpace(m.searchQuery)); q != "" {
+		var matched []model.CareerApplication
+		for _, app := range filtered {
+			if strings.Contains(strings.ToLower(app.Company), q) ||
+				strings.Contains(app.ReportNumber, q) {
+				matched = append(matched, app)
+			}
+		}
+		filtered = matched
 	}
 
 	// Sort
@@ -916,6 +1043,7 @@ func (m PipelineModel) View() string {
 	body := m.renderBody()
 	preview := m.renderPreview()
 	help := m.renderHelp()
+	searchBar := m.renderSearchBar()
 
 	// Apply scroll to body
 	bodyLines := strings.Split(body, "\n")
@@ -923,9 +1051,13 @@ func (m PipelineModel) View() string {
 		bodyLines = bodyLines[m.scrollOffset:]
 	}
 
-	// Calculate available height for body
+	// Calculate available height for body. tabs(2) + help(2) + preview, plus
+	// one line for the search bar when it is rendered.
 	previewLines := strings.Count(preview, "\n") + 1
-	availHeight := m.height - 5 - previewLines // tabs(2) + help(2) + preview
+	availHeight := m.height - 5 - previewLines
+	if searchBar != "" {
+		availHeight--
+	}
 	if availHeight < 3 {
 		availHeight = 3
 	}
@@ -939,35 +1071,81 @@ func (m PipelineModel) View() string {
 		body = m.overlayStatusPicker(body)
 	}
 
-	return lipgloss.JoinVertical(lipgloss.Left,
-		tabs,
-		body,
-		preview,
-		help,
-	)
+	parts := []string{tabs}
+	if searchBar != "" {
+		parts = append(parts, searchBar)
+	}
+	parts = append(parts, body, preview, help)
+	return lipgloss.JoinVertical(lipgloss.Left, parts...)
+}
+
+// renderSearchBar returns a single-line table header showing the search
+// input. Empty string when no query and not editing — the row collapses out
+// of the layout entirely so steady-state pixels are unchanged.
+func (m PipelineModel) renderSearchBar() string {
+	if !m.searchEditing && m.searchQuery == "" {
+		return ""
+	}
+	cursor := ""
+	if m.searchEditing {
+		cursor = "█"
+	}
+	labelStyle := lipgloss.NewStyle().Foreground(m.theme.Sky).Bold(true)
+	valueStyle := lipgloss.NewStyle().Foreground(m.theme.Text)
+	hintStyle := lipgloss.NewStyle().Foreground(m.theme.Subtext)
+
+	line := labelStyle.Render("Find: ") + valueStyle.Render(m.searchQuery+cursor)
+	if m.searchEditing {
+		line += hintStyle.Render("    Enter commit · Esc clear")
+	} else {
+		matched := len(m.filtered)
+		line += hintStyle.Render(fmt.Sprintf("    %d match", matched))
+		if matched != 1 {
+			line += hintStyle.Render("es")
+		}
+	}
+	return lipgloss.NewStyle().Padding(0, 2).Render(line)
 }
 
 func (m PipelineModel) renderTabs() string {
+	return renderPipelineTabBar(m.theme, pipelineTabs[m.activeTab].filter, m.width, m.TabCounts())
+}
+
+// TabCounts returns a snapshot of the per-filter row counts the tab bar shows.
+// CV editor grabs this at construction time so it can render the same tab
+// strip with the same numbers while the editor owns the screen.
+func (m PipelineModel) TabCounts() map[string]int {
+	counts := make(map[string]int, len(pipelineTabs))
+	for _, tab := range pipelineTabs {
+		counts[tab.filter] = m.countForFilter(tab.filter)
+	}
+	return counts
+}
+
+// renderPipelineTabBar renders the tab strip with `activeFilter` highlighted.
+// Shared between the pipeline screen (which owns the active filter) and the CV
+// editor (which always renders CV as active). Counts is a lookup by filter
+// name — pseudo-tabs (progress, cv) intentionally don't display counts.
+func renderPipelineTabBar(t theme.Theme, activeFilter string, width int, counts map[string]int) string {
 	var tabs []string
 	var underParts []string
 
-	for i, tab := range pipelineTabs {
-		// Count items for this tab
+	for _, tab := range pipelineTabs {
 		label := fmt.Sprintf(" %s ", tab.label)
-		if tab.filter != filterProgress {
-			label = fmt.Sprintf(" %s (%d) ", tab.label, m.countForFilter(tab.filter))
+		if tab.filter != filterProgress && tab.filter != filterCV {
+			label = fmt.Sprintf(" %s (%d) ", tab.label, counts[tab.filter])
 		}
 
-		if i == m.activeTab {
+		if tab.filter == activeFilter {
 			style := lipgloss.NewStyle().
 				Bold(true).
-				Foreground(m.theme.Blue).
+				Foreground(t.Blue).
 				Padding(0, 0)
 			tabs = append(tabs, style.Render(label))
 			underParts = append(underParts, strings.Repeat("━", lipgloss.Width(label)))
 		} else {
 			style := lipgloss.NewStyle().
-				Foreground(m.theme.Subtext).
+				Foreground(t.Subtext).
 				Padding(0, 0)
 			tabs = append(tabs, style.Render(label))
 			underParts = append(underParts, strings.Repeat("─", lipgloss.Width(label)))
@@ -976,11 +1154,12 @@ func (m PipelineModel) renderTabs() string {
 
 	row := lipgloss.JoinHorizontal(lipgloss.Top, tabs...)
 	underlineRaw := strings.Join(underParts, "")
-	// Extend the underline to the full terminal width so it matches the bottom bar.
-	if pad := m.width - 2 - lipgloss.Width(underlineRaw); pad > 0 {
+	// Extend the underline to the full terminal width so it matches the
+	// bottom bar.
+	if pad := width - 2 - lipgloss.Width(underlineRaw); pad > 0 {
 		underlineRaw += strings.Repeat("─", pad)
 	}
-	underline := lipgloss.NewStyle().Foreground(m.theme.Overlay).Render(underlineRaw)
+	underline := lipgloss.NewStyle().Foreground(t.Overlay).Render(underlineRaw)
 
 	padStyle := lipgloss.NewStyle().Padding(0, 1)
 	return padStyle.Render(row) + "\n" + padStyle.Render(underline)
@@ -1017,7 +1196,7 @@ func (m PipelineModel) countForFilter(filter string) int {
 	for _, app := range m.apps {
 		norm := data.NormalizeStatus(app.Status)
 		switch filter {
-		case filterProgress:
+		case filterProgress, filterCV:
 			return 0
 		case filterPriority:
 			if norm == filterEvaluated && app.Score >= priorityThreshold {
@@ -1080,12 +1259,12 @@ func (m PipelineModel) renderAppLine(app model.CareerApplication, selected bool)
 	padStyle := lipgloss.NewStyle().Padding(0, 2)
 
 	// Column widths
-	numW := 3
+	numW := 4
 	scoreW := 5
 	dateW := 5 // MM/DD
 	companyW := 16
 	statusW := 12
-	cvW := 6 // "gen…" / "rev…" / "review" / "pdf✓" / "pdf✗"
+	cvW := 7 // "Gen…" / "Rev…" / "Review" / "PDF ✓" / "PDF ✗" + 1 trailing pad
 	// Role gets remaining space (scoreW + dateW + numW + companyW + statusW + cvW + 7 separators/padding)
 	roleW := m.width - numW - scoreW - dateW - companyW - statusW - cvW - 11
 	if roleW < 15 {
@@ -1108,7 +1287,7 @@ func (m PipelineModel) renderAppLine(app model.CareerApplication, selected bool)
 	if numText == "" {
 		numText = "—"
 	}
-	numStyle := withBg(lipgloss.NewStyle().Foreground(m.theme.Subtext).Width(numW))
+	numStyle := withBg(lipgloss.NewStyle().Foreground(m.theme.Subtext).Width(numW).Align(lipgloss.Right))
 
 	scoreStyle := withBg(m.scoreStyle(app.Score).Width(scoreW))
 	score := scoreStyle.Render(fmt.Sprintf("%.1f", app.Score))
@@ -1134,17 +1313,17 @@ func (m PipelineModel) renderAppLine(app model.CareerApplication, selected bool)
 	cvText := cvBase.Render("")
 	switch m.cvGenStatus[appKey(app)] {
 	case "generating":
-		cvText = withBg(lipgloss.NewStyle().Foreground(m.theme.Yellow).Width(cvW)).Render("gen…")
+		cvText = withBg(lipgloss.NewStyle().Foreground(m.theme.Yellow).Width(cvW)).Render("Gen…")
 	case "reviewing":
-		cvText = withBg(lipgloss.NewStyle().Foreground(m.theme.Yellow).Width(cvW)).Render("rev…")
+		cvText = withBg(lipgloss.NewStyle().Foreground(m.theme.Yellow).Width(cvW)).Render("Rev…")
 	case "review-pending":
-		cvText = withBg(lipgloss.NewStyle().Foreground(m.theme.Blue).Width(cvW)).Render("review")
+		cvText = withBg(lipgloss.NewStyle().Foreground(m.theme.Blue).Width(cvW)).Render("Review")
 	case "rendering":
-		cvText = withBg(lipgloss.NewStyle().Foreground(m.theme.Yellow).Width(cvW)).Render("pdf…")
+		cvText = withBg(lipgloss.NewStyle().Foreground(m.theme.Yellow).Width(cvW)).Render("PDF…")
 	case "done":
-		cvText = withBg(lipgloss.NewStyle().Foreground(m.theme.Green).Width(cvW)).Render("pdf✓")
+		cvText = withBg(lipgloss.NewStyle().Foreground(m.theme.Green).Width(cvW)).Render("PDF ✓")
 	case "error":
-		cvText = withBg(lipgloss.NewStyle().Foreground(m.theme.Red).Width(cvW)).Render("pdf✗")
+		cvText = withBg(lipgloss.NewStyle().Foreground(m.theme.Red).Width(cvW)).Render("PDF ✗")
 	}
 
 	line := sep + score + sep +
@@ -1234,6 +1413,7 @@ func (m PipelineModel) renderHelp() string {
 		hint("", "c", "hange"),
 		hint("", "d", "iscard"),
 		hint("", "g", "enerate CV"),
+		hint("", "f", "ind"),
 		hint("", "r", "efresh"),
 	}
 	if fetchedCount := m.metrics.ByStatus["fetched"]; fetchedCount > 0 {

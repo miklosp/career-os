@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"regexp"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/textarea"
 	tea "github.com/charmbracelet/bubbletea"
@@ -52,7 +54,7 @@ type finding struct {
 	GeneratedText string // verbatim from the review JSON — what the reviewer claimed is in the CV
 	SourceCV      string
 	Issue         string
-	ProposedFix   string
+	Replacement   string // literal drop-in text spliced in place of GeneratedText
 
 	State findingState
 	// MatchedText is the actual CV substring that GeneratedText resolves to.
@@ -63,7 +65,7 @@ type finding struct {
 	// substitution and block-range logic uses MatchedText, not GeneratedText.
 	// Empty string means no resolution was possible (→ fsStale).
 	MatchedText string
-	// AppliedText is the replacement currently in the CV markdown (proposed_fix
+	// AppliedText is the replacement currently in the CV markdown (replacement
 	// for `apply`, user input for `edit`). Empty otherwise.
 	AppliedText string
 }
@@ -81,7 +83,10 @@ type reviewFinding struct {
 	GeneratedText string `json:"generated_text"`
 	SourceCV      string `json:"source_cv_evidence"`
 	Issue         string `json:"issue"`
-	ProposedFix   string `json:"proposed_fix"`
+	Replacement   string `json:"replacement"`
+	// LegacyFix captures the pre-rename `proposed_fix` key so a review JSON
+	// cached before the schema rename still resolves. Prefer Replacement.
+	LegacyFix string `json:"proposed_fix"`
 }
 
 type reviewSummary struct {
@@ -100,9 +105,14 @@ type FactCheckModel struct {
 	appKey         string
 	app            model.CareerApplication
 
-	cvContent      string
-	findings       []finding
-	overallVerdict string
+	cvContent string
+	findings  []finding
+
+	// generatedAt is the CV's generation date, shown in the header. Read once
+	// from the review JSON's mtime — cv-fact-check.mjs writes that file once and
+	// never rewrites it, so the date stays stable across resume sessions, unlike
+	// the CV markdown which this screen mutates on every apply/edit.
+	generatedAt time.Time
 
 	cursor           int
 	leftScrollOffset int
@@ -125,6 +135,10 @@ type FactCheckModel struct {
 	// exact text in the CV — not the narrow generated_text — so the user can
 	// rewrite the whole sentence context, not just the flagged phrase.
 	editingOriginalBlock string
+	// guardNote is a one-line warning shown above the edit textarea when the
+	// apply-time guard bounced a prose-shaped replacement into the edit flow.
+	// Cleared when the edit session ends.
+	guardNote string
 
 	confirmingFinalize bool
 
@@ -191,8 +205,18 @@ func NewFactCheckModel(
 		return m
 	}
 
-	m.overallVerdict = rf.Summary.OverallVerdict
+	// Generation date for the header — see the generatedAt field comment.
+	if fi, err := os.Stat(reviewJSONPath); err == nil {
+		m.generatedAt = fi.ModTime()
+	} else if fi, err := os.Stat(cvPath); err == nil {
+		m.generatedAt = fi.ModTime()
+	}
+
 	for _, rfd := range rf.Findings {
+		rep := rfd.Replacement
+		if rep == "" {
+			rep = rfd.LegacyFix
+		}
 		f := finding{
 			ID:            rfd.ID,
 			Severity:      rfd.Severity,
@@ -200,7 +224,7 @@ func NewFactCheckModel(
 			GeneratedText: rfd.GeneratedText,
 			SourceCV:      rfd.SourceCV,
 			Issue:         rfd.Issue,
-			ProposedFix:   rfd.ProposedFix,
+			Replacement:   rep,
 		}
 		f.MatchedText = resolveMatch(m.cvContent, rfd.GeneratedText)
 		if f.MatchedText != "" {
@@ -276,13 +300,13 @@ func (m FactCheckModel) handleKey(msg tea.KeyMsg) (FactCheckModel, tea.Cmd) {
 	case "q", "esc":
 		return m, m.closeCmd()
 
-	case "down", "j":
+	case "down":
 		if len(m.findings) > 0 {
 			m.cursor = (m.cursor + 1) % len(m.findings)
 			m.scrollToActive()
 		}
 
-	case "up", "k":
+	case "up":
 		if len(m.findings) > 0 {
 			m.cursor--
 			if m.cursor < 0 {
@@ -296,9 +320,34 @@ func (m FactCheckModel) handleKey(msg tea.KeyMsg) (FactCheckModel, tea.Cmd) {
 		if f == nil || f.State == fsStale {
 			return m, nil
 		}
-		m.applyReplacement(m.cursor, f.ProposedFix, fsApplied)
+		// Guard: a `replacement` that reads as a recommendation sentence
+		// ("Could upgrade to 'X' — defensible from id") would splice the whole
+		// sentence into the CV. Surface it instead of blind-applying — bounce
+		// into the edit flow with the enclosing block pre-seeded (best-guess
+		// clean phrase already swapped in when one could be extracted). Nothing
+		// reaches disk until the user confirms with Ctrl+D.
+		if clean, suspicious := vetReplacement(f.Replacement, f.MatchedText); suspicious {
+			block := m.activeBlockText()
+			if block == "" {
+				block = f.MatchedText
+			}
+			if block == "" {
+				block = f.GeneratedText
+			}
+			seeded := block
+			if clean != "" && f.MatchedText != "" {
+				seeded = strings.Replace(block, f.MatchedText, clean, 1)
+			}
+			m.editingOriginalBlock = block
+			m.editing = true
+			m.guardNote = "Replacement looked like prose, not a drop-in — review before applying."
+			m.editArea.SetValue(seeded)
+			m.editArea.CursorEnd()
+			return m, m.editArea.Focus()
+		}
+		m.applyReplacement(m.cursor, f.Replacement, fsApplied)
 
-	case "r":
+	case "k":
 		f := m.activeFinding()
 		if f == nil || f.State == fsStale {
 			return m, nil
@@ -376,6 +425,7 @@ func (m FactCheckModel) handleEdit(msg tea.KeyMsg) (FactCheckModel, tea.Cmd) {
 	case tea.KeyEsc:
 		m.editing = false
 		m.editingOriginalBlock = ""
+		m.guardNote = ""
 		m.editArea.Reset()
 		m.editArea.Blur()
 		return m, nil
@@ -386,6 +436,7 @@ func (m FactCheckModel) handleEdit(msg tea.KeyMsg) (FactCheckModel, tea.Cmd) {
 		m.applyBlockReplacement(m.cursor, m.editingOriginalBlock, newText)
 		m.editing = false
 		m.editingOriginalBlock = ""
+		m.guardNote = ""
 		m.editArea.Reset()
 		m.editArea.Blur()
 		return m, nil
@@ -659,7 +710,7 @@ func wrapPlainLine(line string, maxWidth int) []string {
 }
 
 func (m FactCheckModel) bodyHeight() int {
-	h := m.height - 4 // header + footer + a little padding
+	h := m.height - 5 // header + header rule + footer (rule + row) + padding
 	if h < 5 {
 		h = 5
 	}
@@ -692,7 +743,16 @@ func (m FactCheckModel) View() string {
 	header := m.renderHeader()
 	body := m.renderBody()
 	footer := m.renderFooter()
-	return lipgloss.JoinVertical(lipgloss.Left, header, body, footer)
+	return lipgloss.JoinVertical(lipgloss.Left, header, m.renderHRule(), body, footer)
+}
+
+// renderHRule is the full-width horizontal divider used under the header and
+// above the footer.
+func (m FactCheckModel) renderHRule() string {
+	return lipgloss.NewStyle().
+		Foreground(m.theme.Overlay).
+		Padding(0, 1).
+		Render(strings.Repeat("─", max0(m.width-2)))
 }
 
 func (m FactCheckModel) renderHeader() string {
@@ -704,17 +764,27 @@ func (m FactCheckModel) renderHeader() string {
 		Padding(0, 2)
 
 	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(m.theme.Blue)
-	counterStyle := lipgloss.NewStyle().Foreground(m.theme.Subtext)
+	metaStyle := lipgloss.NewStyle().Foreground(m.theme.Subtext)
 
-	counter := fmt.Sprintf("%d / %d", m.cursor+1, len(m.findings))
+	counter := fmt.Sprintf("%d/%d", m.cursor+1, len(m.findings))
 	if len(m.findings) == 0 {
-		counter = "0 / 0"
+		counter = "0/0"
 	}
 
-	verdict := m.renderVerdictPill()
+	// Right side, left-to-right: CV generation date, one dot per finding
+	// (severity-colored while pending, hollow once decided), the cursor
+	// counter, then the live send verdict.
+	var rightParts []string
+	if !m.generatedAt.IsZero() {
+		rightParts = append(rightParts, metaStyle.Render("Generated: "+m.generatedAt.Format("01/02")))
+	}
+	if dots := m.renderFindingDots(); dots != "" {
+		rightParts = append(rightParts, dots)
+	}
+	rightParts = append(rightParts, metaStyle.Render(counter), m.renderVerdictPill())
 
 	left := titleStyle.Render(m.title)
-	right := counterStyle.Render(counter) + "  " + verdict
+	right := strings.Join(rightParts, "  ")
 	gap := m.width - lipgloss.Width(left) - lipgloss.Width(right) - 4
 	if gap < 1 {
 		gap = 1
@@ -722,21 +792,56 @@ func (m FactCheckModel) renderHeader() string {
 	return bg.Render(left + strings.Repeat(" ", gap) + right)
 }
 
+// renderFindingDots draws one dot per finding in list order: a filled,
+// severity-colored ● while the finding is still pending a decision, a dimmed
+// hollow ○ once the user has applied, edited, kept, or it went stale. The row
+// reads as a live progress bar of the walkthrough.
+func (m FactCheckModel) renderFindingDots() string {
+	var b strings.Builder
+	for i := range m.findings {
+		if m.findings[i].State == fsPending {
+			b.WriteString(lipgloss.NewStyle().
+				Foreground(severityColor(m.theme, m.findings[i].Severity)).
+				Render("●"))
+		} else {
+			b.WriteString(lipgloss.NewStyle().Foreground(m.theme.Overlay).Render("○"))
+		}
+	}
+	return b.String()
+}
+
+// renderVerdictPill renders the send-readiness pill from the live verdict.
 func (m FactCheckModel) renderVerdictPill() string {
-	color := m.theme.Subtext
-	label := m.overallVerdict
-	if label == "" {
-		label = "—"
-	}
-	switch strings.ToLower(label) {
-	case "do_not_send":
-		color = m.theme.Red
-	case "caution":
-		color = m.theme.Yellow
-	case "ok", "send":
-		color = m.theme.Green
-	}
+	label, color := m.currentVerdict()
 	return lipgloss.NewStyle().Foreground(color).Render("● " + label)
+}
+
+// currentVerdict derives a human-readable send verdict from the findings still
+// pending a decision, so the header improves as the user works the list. A
+// pending fabricated finding holds it at "Do not send"; a pending stretched or
+// bridge finding yields "Caution"; once every finding is decided the CV clears
+// to "Send".
+func (m FactCheckModel) currentVerdict() (string, lipgloss.Color) {
+	pendingHard, pendingSoft := false, false
+	for i := range m.findings {
+		if m.findings[i].State != fsPending {
+			continue
+		}
+		switch m.findings[i].Severity {
+		case "stretched", "bridge":
+			pendingSoft = true
+		default: // fabricated and unknown — treat conservatively
+			pendingHard = true
+		}
+	}
+	switch {
+	case pendingHard:
+		return "Do not send", m.theme.Red
+	case pendingSoft:
+		return "Caution", m.theme.Yellow
+	default:
+		return "Send", m.theme.Green
+	}
 }
 
 func (m FactCheckModel) renderBody() string {
@@ -821,26 +926,107 @@ func (m FactCheckModel) styleVisualLine(line string, logicalIdx int) string {
 	case fsStale:
 		fg = m.theme.Subtext
 	default: // pending
-		switch f.Severity {
-		case "bridge":
-			fg = m.theme.Sky
-		case "stretched":
-			fg = m.theme.Yellow
-		default: // "fabricated" and unknown
-			fg = m.theme.Red
-		}
+		fg = severityColor(m.theme, f.Severity)
 	}
 
-	textStyle := lipgloss.NewStyle().Foreground(fg)
+	subtextStyle := lipgloss.NewStyle().Foreground(m.theme.Subtext)
+	matchStyle := lipgloss.NewStyle().Foreground(fg)
 	if active {
-		textStyle = textStyle.Bold(true)
+		matchStyle = matchStyle.Bold(true)
+	}
+
+	// Color only the flagged phrase, not the whole enclosing block. The
+	// left-edge marker still spans every line of the active block so the
+	// finding is locatable even on lines the phrase doesn't touch.
+	needle := f.MatchedText
+	if needle == "" {
+		needle = f.GeneratedText
+	}
+	if f.State == fsApplied || f.State == fsEdited {
+		needle = f.AppliedText
+	}
+
+	var content string
+	if s, e, ok := matchSpanInLine(line, needle); ok {
+		content = subtextStyle.Render(line[:s]) +
+			matchStyle.Render(line[s:e]) +
+			subtextStyle.Render(line[e:])
+	} else {
+		content = subtextStyle.Render(line)
 	}
 
 	if active {
 		marker := lipgloss.NewStyle().Foreground(fg).Bold(true).Render("▌ ")
-		return marker + textStyle.Render(line)
+		return marker + content
 	}
-	return "  " + textStyle.Render(line)
+	return "  " + content
+}
+
+// matchSpanInLine locates the portion of a single rendered visual line that
+// belongs to `needle`, tolerant of word-wrap whitespace collapsing. It returns
+// byte offsets into `line`. Because wrapping splits a logical line into visual
+// lines at word boundaries, the needle either sits fully inside the line, fully
+// contains the line, or straddles one edge — the four cases handled below.
+func matchSpanInLine(line, needle string) (int, int, bool) {
+	needleN := normalizeWhitespace(strings.TrimSpace(needle))
+	if needleN == "" {
+		return 0, 0, false
+	}
+	lineN, n2o := normWithMap(line)
+	if lineN == "" {
+		return 0, 0, false
+	}
+	// 1. Whole needle inside this line.
+	if p := strings.Index(lineN, needleN); p >= 0 {
+		return n2o[p], n2o[p+len(needleN)], true
+	}
+	// 2. Whole line interior to the needle (a middle wrap row).
+	if strings.Contains(needleN, lineN) {
+		return n2o[0], n2o[len(lineN)], true
+	}
+	// 3. Needle begins partway through this line (line ends mid-needle):
+	//    some suffix of the line is a prefix of the needle.
+	for s := 0; s < len(lineN); s++ {
+		if strings.HasPrefix(needleN, lineN[s:]) {
+			return n2o[s], n2o[len(lineN)], true
+		}
+	}
+	// 4. Needle ends partway through this line (line starts mid-needle):
+	//    some prefix of the line is a suffix of the needle.
+	for e := len(lineN); e > 0; e-- {
+		if strings.HasSuffix(needleN, lineN[:e]) {
+			return n2o[0], n2o[e], true
+		}
+	}
+	return 0, 0, false
+}
+
+// normWithMap collapses whitespace runs the same way normalizeWhitespace does,
+// and returns a parallel index map: m[i] is the byte offset in the original
+// string that normalized byte i came from, with a final sentinel m[len] =
+// len(s) so a normalized end-index maps back to an original end-index.
+func normWithMap(s string) (string, []int) {
+	var b strings.Builder
+	b.Grow(len(s))
+	m := make([]int, 0, len(s)+1)
+	prevWS := false
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if c == ' ' || c == '\t' || c == '\n' || c == '\r' {
+			if prevWS {
+				continue
+			}
+			b.WriteByte(' ')
+			m = append(m, i)
+			prevWS = true
+		} else {
+			b.WriteByte(c)
+			m = append(m, i)
+			prevWS = false
+		}
+	}
+	m = append(m, len(s))
+	return b.String(), m
 }
 
 
@@ -874,11 +1060,7 @@ func (m FactCheckModel) renderRight(bh int) string {
 	// Flagged phrase — what's currently in the CV. Use the resolved MatchedText
 	// (the actual CV substring after whitespace-tolerant matching) so the user
 	// sees what will actually be replaced, not what the reviewer typed.
-	phraseLabel := "Currently in CV"
-	if f.Severity == "bridge" {
-		phraseLabel = "In CV (conservative)"
-	}
-	lines = append(lines, label.Render(phraseLabel))
+	lines = append(lines, m.hotkeyLabel("K", "eep"))
 	displayPhrase := f.MatchedText
 	if displayPhrase == "" {
 		displayPhrase = f.GeneratedText // fallback for stale findings
@@ -886,16 +1068,7 @@ func (m FactCheckModel) renderRight(bh int) string {
 	if strings.TrimSpace(displayPhrase) == "" {
 		lines = append(lines, subtext.Italic(true).Render("(no specific phrase recorded)"))
 	} else {
-		var phraseColor lipgloss.Color
-		switch f.Severity {
-		case "stretched":
-			phraseColor = m.theme.Yellow
-		case "bridge":
-			phraseColor = m.theme.Sky
-		default:
-			phraseColor = m.theme.Red
-		}
-		phraseStyle := lipgloss.NewStyle().Foreground(phraseColor)
+		phraseStyle := lipgloss.NewStyle().Foreground(severityColor(m.theme, f.Severity))
 		// Preserve logical line breaks (multi-line matches) but wrap each line
 		// to the pane width. No substitution, no splicing — just verbatim.
 		for _, ln := range strings.Split(displayPhrase, "\n") {
@@ -910,15 +1083,11 @@ func (m FactCheckModel) renderRight(bh int) string {
 	// block, NOT spliced into the surrounding line context (that ambiguity is
 	// the source of "did this concatenate or substitute?" confusion). The
 	// left pane shows the bullet/paragraph in context with the match highlighted.
-	fixLabel := "Becomes"
-	if f.Severity == "bridge" {
-		fixLabel = "Becomes (JD vocabulary upgrade)"
-	}
-	lines = append(lines, label.Render(fixLabel))
+	lines = append(lines, m.hotkeyLabel("A", "pply fix"))
 	switch {
 	case displayPhrase == "":
 		lines = append(lines, subtext.Italic(true).Render("(no replacement available)"))
-	case f.ProposedFix == "":
+	case f.Replacement == "":
 		// Empty fix = delete. Render the would-be-removed text with strikethrough.
 		strike := lipgloss.NewStyle().Foreground(m.theme.Subtext).Strikethrough(true)
 		lines = append(lines, subtext.Italic(true).Render("(the phrase above is removed)"))
@@ -929,7 +1098,7 @@ func (m FactCheckModel) renderRight(bh int) string {
 		}
 	default:
 		fixStyle := lipgloss.NewStyle().Foreground(m.theme.Green).Bold(true)
-		for _, ln := range strings.Split(f.ProposedFix, "\n") {
+		for _, ln := range strings.Split(f.Replacement, "\n") {
 			for _, vl := range wrapPlainLine(ln, rw-2) {
 				lines = append(lines, fixStyle.Render(vl))
 			}
@@ -947,6 +1116,12 @@ func (m FactCheckModel) renderRight(bh int) string {
 	// Edit textarea (if active)
 	if m.editing {
 		lines = append(lines, "")
+		if m.guardNote != "" {
+			warn := lipgloss.NewStyle().Foreground(m.theme.Yellow).Bold(true)
+			for _, ln := range wrap("⚠ "+m.guardNote, rw-2) {
+				lines = append(lines, warn.Render(ln))
+			}
+		}
 		lines = append(lines, label.Render("Edit (Ctrl+D apply, Esc cancel)"))
 		// Append textarea view as separate lines so wrapping and cursor render
 		// correctly. Width is set by Resize; height defaults to 4 rows.
@@ -1065,18 +1240,76 @@ func normalizeWhitespace(s string) string {
 	return b.String()
 }
 
+// reQuotedSpan matches text wrapped in straight or smart quotes — the shape of
+// a replacement phrase the LLM embedded inside a recommendation sentence.
+var reQuotedSpan = regexp.MustCompile(`['"\x{201c}\x{201d}\x{2018}\x{2019}]([^'"\x{201c}\x{201d}\x{2018}\x{2019}]{3,})['"\x{201c}\x{201d}\x{2018}\x{2019}]`)
+
+// reProseTell matches recommendation-sentence telltales that should never
+// appear in a literal drop-in replacement.
+var reProseTell = regexp.MustCompile(`(?i)(^\s*(could|consider|recommend|you could)\s)|(\bdefensible from\b)|(\bupgrade to\b)`)
+
+// vetReplacement detects a "prose-shaped" replacement — one where the reviewer
+// wrote a recommendation sentence ("Could upgrade to 'X' — defensible from id")
+// into the replacement field instead of the bare drop-in phrase. Splicing it
+// verbatim would inject the whole sentence into the CV. clean is the best-guess
+// replacement (the longest quote-wrapped span) or "" when nothing is salvageable.
+func vetReplacement(replacement, generatedText string) (clean string, suspicious bool) {
+	r := strings.TrimSpace(replacement)
+	if r == "" {
+		return "", false
+	}
+	clean = longestQuotedSpan(r)
+	hasOutside := clean != "" && strings.TrimSpace(stripQuoteChars(r)) != clean
+	telltale := reProseTell.MatchString(r)
+	tooLong := generatedText != "" && len(r) > len(generatedText)*2+40
+	return clean, (clean != "" && hasOutside) || telltale || tooLong
+}
+
+// longestQuotedSpan returns the longest quote-wrapped span in s, trimmed.
+func longestQuotedSpan(s string) string {
+	best := ""
+	for _, mt := range reQuotedSpan.FindAllStringSubmatch(s, -1) {
+		if c := strings.TrimSpace(mt[1]); len(c) > len(best) {
+			best = c
+		}
+	}
+	return best
+}
+
+// stripQuoteChars removes straight and smart quote characters from s.
+func stripQuoteChars(s string) string {
+	return strings.NewReplacer(
+		`'`, "", `"`, "",
+		"“", "", "”", "",
+		"‘", "", "’", "",
+	).Replace(s)
+}
+
+// severityColor maps a finding severity to its theme color: fabricated → red,
+// stretched → yellow, bridge → sky. Unknown severities fall back to red — the
+// conservative choice treats an unrecognized flag as a hard problem.
+func severityColor(t theme.Theme, severity string) lipgloss.Color {
+	switch severity {
+	case "stretched":
+		return t.Yellow
+	case "bridge":
+		return t.Sky
+	default:
+		return t.Red
+	}
+}
+
 func (m FactCheckModel) renderSeverityPill(f finding) string {
-	color := m.theme.Red
 	label := "FABRICATED"
 	switch f.Severity {
 	case "stretched":
-		color = m.theme.Yellow
 		label = "STRETCHED"
 	case "bridge":
-		color = m.theme.Sky
 		label = "BRIDGE"
 	}
-	return lipgloss.NewStyle().Bold(true).Foreground(color).Render("● " + label)
+	return lipgloss.NewStyle().Bold(true).
+		Foreground(severityColor(m.theme, f.Severity)).
+		Render("● " + label)
 }
 
 func (m FactCheckModel) renderStatePill(f finding) string {
@@ -1094,15 +1327,21 @@ func (m FactCheckModel) renderStatePill(f finding) string {
 	}
 }
 
+// hotkeyLabel renders a right-pane section header whose leading letter doubles
+// as the action's hotkey: the key is underlined/blue (matching the footer hint
+// style) and the rest keeps the section-label style.
+func (m FactCheckModel) hotkeyLabel(key, rest string) string {
+	hk := lipgloss.NewStyle().Bold(true).Foreground(m.theme.Blue).Underline(true)
+	lb := lipgloss.NewStyle().Bold(true).Foreground(m.theme.Sky)
+	return hk.Render(key) + lb.Render(rest)
+}
+
 func (m FactCheckModel) renderFooter() string {
 	rowStyle := lipgloss.NewStyle().Padding(0, 1)
 	hotkey := lipgloss.NewStyle().Foreground(m.theme.Blue).Underline(true)
 	text := lipgloss.NewStyle().Foreground(m.theme.Subtext)
 
-	separator := lipgloss.NewStyle().
-		Foreground(m.theme.Overlay).
-		Padding(0, 1).
-		Render(strings.Repeat("─", max0(m.width-2)))
+	separator := m.renderHRule()
 
 	hint := func(prefix, key, suffix string) string {
 		return text.Render(prefix) + hotkey.Render(key) + text.Render(suffix)
@@ -1128,7 +1367,7 @@ func (m FactCheckModel) renderFooter() string {
 		hint("", "↑↓", " next/prev"),
 		hint("", "a", "pply fix"),
 		hint("", "e", "dit"),
-		hint("", "r", " keep"),
+		hint("", "k", "eep"),
 		hint("", "f", "inalize"),
 		hint("", "q", "uit"),
 	}, "  "))
