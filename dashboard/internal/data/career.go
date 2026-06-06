@@ -979,6 +979,23 @@ func ScanOutputReviewsByNum(careerOpsPath string) map[string]bool {
 	return scanOutputByNumSuffix(careerOpsPath, "-cv-review.json")
 }
 
+// LeadingNum returns the zero-padded numeric prefix of a report/JD/CV filename
+// like "1085-zyte-…md" → "1085". The career-ops NUM is a 3+ digit sequence
+// (lib/next-num.mjs), so we take the full leading run of digits: a fixed
+// name[:3] silently truncates "1085" to "108" and breaks every NUM ≥ 1000.
+// Returns "" when fewer than 3 leading digits are present.
+func LeadingNum(name string) string {
+	base := filepath.Base(name)
+	i := 0
+	for i < len(base) && base[i] >= '0' && base[i] <= '9' {
+		i++
+	}
+	if i < 3 {
+		return ""
+	}
+	return base[:i]
+}
+
 func scanOutputByNumSuffix(careerOpsPath, suffix string) map[string]bool {
 	outDir := filepath.Join(careerOpsPath, "output", "customized-cvs")
 	entries, err := os.ReadDir(outDir)
@@ -988,19 +1005,11 @@ func scanOutputByNumSuffix(careerOpsPath, suffix string) map[string]bool {
 	result := make(map[string]bool)
 	for _, e := range entries {
 		name := e.Name()
-		if !strings.HasSuffix(name, suffix) || len(name) < 3 {
+		if !strings.HasSuffix(name, suffix) {
 			continue
 		}
-		prefix := name[:3]
-		allDigits := true
-		for _, r := range prefix {
-			if r < '0' || r > '9' {
-				allDigits = false
-				break
-			}
-		}
-		if allDigits {
-			result[prefix] = true
+		if num := LeadingNum(name); num != "" {
+			result[num] = true
 		}
 	}
 	return result

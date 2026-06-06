@@ -121,3 +121,26 @@ func TestUpdateApplicationStatus_NotFound(t *testing.T) {
 		t.Fatal("expected not-found error for missing tracker number")
 	}
 }
+
+func TestLeadingNum(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"3-digit report path", "data/reports/516-zyte-2026-05-16.md", "516"},
+		{"4-digit report path", "data/reports/1085-zyte-ai-product-manager-owner-2026-06-04.md", "1085"},
+		{"4-digit cv filename", "1085-zyte-ai-product-manager-owner-remote-cv.md", "1085"},
+		{"bare 4-digit num", "1085", "1085"},
+		{"non-digit prefix", "data/reports/abc-foo.md", ""},
+		{"too short (2 digits)", "12-foo.md", ""},
+		{"exactly 3 digits", "064-legora.md", "064"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := LeadingNum(tt.in); got != tt.want {
+				t.Errorf("LeadingNum(%q) = %q, want %q", tt.in, got, tt.want)
+			}
+		})
+	}
+}
