@@ -44,7 +44,4 @@ package-lock.json
 .safehouse
 
 # Local scratch / research notes (not repo content)
-/ATS.md
-/ATS-review.md
-/location-scope-analysis.md
-/todo.md
+.notes

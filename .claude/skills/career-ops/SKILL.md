@@ -3,7 +3,7 @@ name: career-ops
 description: AI job search command center -- evaluate offers, generate CVs, scan portals, track applications, interview practice
 user_invocable: true
 args: mode
-argument-hint: "[scan | apply | interview-prep | practice | mock | analyze | storybank]"
+argument-hint: "[scan | apply | cv | cover-letter | storybank | interview-prep | practice | mock | analyze]"
 ---
 
 # career-ops -- Router
@@ -18,11 +18,13 @@ Determine the mode from `{{mode}}`:
 | One or more URLs (no sub-command) | **`auto-pipeline`** — fan out one background agent per URL |
 | `scan` | `scan` |
 | `apply` | `apply` |
+| `cv` (optional `optimize`) | `cv` |
+| `cover-letter` (optional `{NUM}` or pasted JD) | `cover-letter` |
+| `storybank` (optional `review` / `add` / `status`) | `storybank` |
 | `interview-prep` | `interview-prep` |
 | `practice` (optional `--type ...`, `--story S0XX`) | `practice` |
 | `mock` (optional `--company ...`, `--round-type ...`, `--length ...`) | `mock` |
 | `analyze --transcript {path}` (optional `--company ...`) | `analyze` |
-| `storybank` (optional `review` / `add` / `status`) | `storybank` |
 
 **Auto-pipeline detection:** If `{{mode}}` is not a known sub-command, treat it as input to the pipeline:
 
@@ -43,6 +45,7 @@ career-ops -- Command Center
   /career-ops {url...}       → fetch + location-gate + score each URL in parallel (background)
   /career-ops scan           → discover new offers across portals (prints URLs to dispatch)
   /career-ops apply          → live application assistant (reads form + drafts answers)
+  /career-ops cover-letter   → one-page cover letter PDF for an application (+ paste-ready text)
   /career-ops interview-prep → company-specific interview prep (research artifact)
 
 Practice & simulation:

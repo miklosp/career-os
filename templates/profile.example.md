@@ -5,7 +5,6 @@
 # Frontmatter holds the two structured contracts the system parses:
 #   candidate       → lib/generate-cv-llm.mjs (CV identity header)
 #   location_policy  → modes/_location-gate.md (per-JD skip gate)
-#   tooling          → dashboard/main.go (apply-flow launcher)
 # Everything else (archetypes, narrative, voice, scoring) is the markdown body.
 candidate:
   full_name: "Jane Smith"
@@ -48,12 +47,6 @@ location_policy:
     - us_work_auth_required
     - onsite_and_relocation_required
     - timezone_outside_home_tolerance
-
-# Dashboard tooling. Read by the Go TUI (dashboard/main.go), not by any LLM mode.
-# Coding agent the dashboard launches for the interactive apply flow (`a` key).
-# Override per-invocation with $CAREER_OPS_APPLY_CMD.
-tooling:
-  apply_agent: "claude"
 ---
 
 # User Profile Context — career-ops (Jane Smith)

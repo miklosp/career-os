@@ -39,6 +39,8 @@ Agents NEVER call `merge-tracker.mjs` or `dedup-tracker.mjs` — only the user d
 | Pastes one or more URLs | `auto-pipeline` (fan out one bg agent per URL) |
 | Interview prep for a company | `interview-prep` (web research allowed here) |
 | Generate CV/PDF | `pdf` (Opus 4.7 via Bifrost, dashboard `g`) |
+| CV health / optimization walkthrough | `cv` (deterministic `lib/cv-status.mjs` + interactive next-action walk) |
+| Write a cover letter | `cover-letter` (one-page PDF + paste text; standalone or called by `apply`) |
 | Application status | `tracker` |
 | Fill an application form | `apply` |
 | Find new offers | `scan` (then dispatch one fetch agent per URL) |
