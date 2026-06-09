@@ -57,6 +57,8 @@ import yaml from "js-yaml";
 import { runLinkedInScan } from "./lib/scan-linkedin.mjs";
 import { runRemoteInEuropeScan } from "./lib/scan-remoteineurope.mjs";
 import { runHiringCafeScan } from "./lib/scan-hiringcafe.mjs";
+import { runWeWorkRemotelyScan } from "./lib/scan-weworkremotely.mjs";
+import { runRemotePmJobsScan } from "./lib/scan-remotepmjobs.mjs";
 import {
   openScanHistoryDb,
   loadSeenUrls,
@@ -501,6 +503,59 @@ async function main() {
     errors.push({ company: "hiring.cafe", error: err.message });
   }
 
+  // 5e. We Work Remotely — full-text category RSS, free, no Apify. The whole
+  // JD ships in each feed item, so this prefetches data/jds/ + applications.md
+  // rows like the LinkedIn level; dispatched agents skip _fetch.md and run
+  // gate+score only. Canonical URL is the WWR detail page; employer-ATS
+  // resolution defers to apply-time. Driven by weworkremotely_feeds in
+  // portals.yml; the global title_filter does the precise include/exclude.
+  let wwrUrls = [];
+  let wwrStats = null;
+  if (config.weworkremotely_feeds?.length) {
+    const jdsDir = resolve("data/jds");
+    mkdirSync(jdsDir, { recursive: true });
+    try {
+      const result = await runWeWorkRemotelyScan({
+        db,
+        portalsCfg: config,
+        applicationsPath: APPLICATIONS_PATH,
+        jdsDir,
+        dryRun,
+      });
+      wwrUrls = result.newUrls;
+      wwrStats = result.stats;
+    } catch (err) {
+      errors.push({ company: "weworkremotely.com", error: err.message });
+    }
+  }
+
+  // 5f. Remote PM Jobs — public MCP server (search_jobs/get_job) called as
+  // plain JSON-RPC, free, zero LLM tokens. PM-only board. Prefetches the
+  // structured enrichment into data/jds/ + applications.md rows like the WWR
+  // level; agents skip _fetch.md. Canonical URL is internal (apply-time ATS
+  // resolution). Driven by remotepmjobs_searches in portals.yml; the global
+  // title_filter does the precise include/exclude.
+  let pmUrls = [];
+  let pmStats = null;
+  if (config.remotepmjobs_searches?.length) {
+    const jdsDir = resolve("data/jds");
+    mkdirSync(jdsDir, { recursive: true });
+    try {
+      const result = await runRemotePmJobsScan({
+        db,
+        portalsCfg: config,
+        applicationsPath: APPLICATIONS_PATH,
+        jdsDir,
+        profilePath: "config/profile.md",
+        dryRun,
+      });
+      pmUrls = result.newUrls;
+      pmStats = result.stats;
+    } catch (err) {
+      errors.push({ company: "remotepmjobs.com", error: err.message });
+    }
+  }
+
   // 6. Print summary
   console.log(`\n${"━".repeat(45)}`);
   console.log(`Portal Scan — ${date}`);
@@ -566,6 +621,25 @@ async function main() {
     console.log(`  Banned skipped:      ${hcStats.banned ?? 0}`);
     console.log(`  New dispatchable:    ${hcStats.dispatched}`);
   }
+  if (wwrStats) {
+    console.log(
+      `weworkremotely:        ${wwrStats.feeds} feeds, ${wwrStats.itemsSeen} items scanned, ${wwrStats.alreadySeen} already seen, ${wwrStats.failed} failed`,
+    );
+    console.log(`  Expired skipped:     ${wwrStats.expired}`);
+    console.log(`  Skipped (title):     ${wwrStats.skippedTitle}`);
+    console.log(`  Banned skipped:      ${wwrStats.banned ?? 0}`);
+    console.log(`  Prefetched JDs:      ${wwrStats.prefetched}`);
+  }
+  if (pmStats) {
+    console.log(
+      `remotepmjobs:          ${pmStats.searches} searches, ${pmStats.candidates} candidates, ${pmStats.alreadySeen} already seen, ${pmStats.failed} failed`,
+    );
+    console.log(`  Expired skipped:     ${pmStats.expired}`);
+    console.log(`  Skipped (title):     ${pmStats.skippedTitle}`);
+    console.log(`  Skipped (geo):       ${pmStats.skippedGeo ?? 0}`);
+    console.log(`  Banned skipped:      ${pmStats.banned ?? 0}`);
+    console.log(`  Prefetched JDs:      ${pmStats.prefetched} (${pmStats.atsResolved ?? 0} ATS-resolved)`);
+  }
 
   // Backstop: nothing banned reaches DISPATCH_URLS even if an upstream
   // (LinkedIn/remoteineurope) helper missed it.
@@ -574,6 +648,8 @@ async function main() {
     ...linkedinUrls,
     ...rieUrls,
     ...hcUrls,
+    ...wwrUrls,
+    ...pmUrls,
   ].filter((u) => !isBanned({ url: u }));
 
   if (newOffers.length > 0) {
@@ -601,6 +677,22 @@ async function main() {
   if (hcUrls.length > 0) {
     console.log("\nNew offers (hiring.cafe — resolved employer ATS URLs):");
     for (const url of hcUrls) {
+      console.log(`  + ${url}`);
+    }
+  }
+  if (wwrUrls.length > 0) {
+    console.log(
+      "\nNew offers (We Work Remotely — JDs prefetched, agents skip _fetch.md):",
+    );
+    for (const url of wwrUrls) {
+      console.log(`  + ${url}`);
+    }
+  }
+  if (pmUrls.length > 0) {
+    console.log(
+      "\nNew offers (Remote PM Jobs — JDs prefetched, agents skip _fetch.md):",
+    );
+    for (const url of pmUrls) {
       console.log(`  + ${url}`);
     }
   }
