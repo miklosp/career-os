@@ -85,6 +85,127 @@
       "note": "Star Stable Entertainment Teamtailor career site",
       "source": "learned",
       "added": "2026-06-04"
+    },
+    {
+      "match": "career5.successfactors.eu",
+      "matchType": "host",
+      "handler": "firecrawl",
+      "params": {},
+      "note": "SAP SuccessFactors EU SPA (verp client). No JSON-LD, no unauthenticated OData endpoint. Firecrawl extracts full JD. URL shape: /career?career_ns=job_listing&company={tenant}&career_job_req_id={id}. Other SF tenants (careerXX.successfactors.eu, *.successfactors.com) likely same pattern.",
+      "source": "learned",
+      "added": "2026-06-07"
+    },
+    {
+      "match": "\\.bamboohr\\.com",
+      "matchType": "regex",
+      "handler": "xh",
+      "params": {
+        "ats": "bamboohr",
+        "listEndpoint": "https://{tenant}.bamboohr.com/careers/list",
+        "detailEndpoint": "https://{tenant}.bamboohr.com/careers/{id}/detail",
+        "descriptionKey": "result.jobOpening.description",
+        "titleKey": "result.jobOpening.jobOpeningName"
+      },
+      "note": "BambooHR public careers API. No auth required. List: GET /careers/list → JSON array. Detail: GET /careers/{id}/detail → full JD HTML in result.jobOpening.description. URL pattern: {tenant}.bamboohr.com/careers/{id}. Needs a bamboohr handler in fetch-jd.mjs for zero-token support.",
+      "source": "learned",
+      "added": "2026-06-07"
+    },
+    {
+      "match": "fundraiseup.com",
+      "matchType": "host",
+      "handler": "greenhouse",
+      "params": {
+        "org": "fundraiseup"
+      },
+      "note": "custom domain fronting Greenhouse; canonical URL uses fundraiseup.com/careers/{id}?gh_jid={id}",
+      "source": "learned",
+      "added": "2026-06-07"
+    },
+    {
+      "match": "jobs.smartrecruiters.com",
+      "matchType": "host",
+      "handler": "xh",
+      "params": {
+        "ats": "smartrecruiters",
+        "apiBase": "https://api.smartrecruiters.com/v1/companies",
+        "urlPattern": "/{org}/{numericId}-{slug}"
+      },
+      "note": "SmartRecruiters public postings API (no auth, no credits): GET https://api.smartrecruiters.com/v1/companies/{org}/postings/{numericId}. org = first path segment (e.g. 'Cint'), numericId = leading digits of second path segment before the first '-' (e.g. '744000127844565'). Returns full JSON: .name (title), .location (city/region/country/remote/hybrid), .releasedDate, .active, .jobAd.sections.{companyDescription,jobDescription,qualifications,additionalInformation}.text (HTML), .experienceLevel.label, .typeOfEmployment.label, .customField[] (region, team, dept, employment type). Needs a smartrecruiters handler in fetch-jd.mjs for zero-token support.",
+      "source": "learned",
+      "added": "2026-06-07"
+    },
+    {
+      "match": "careers.bitrefill.com",
+      "matchType": "host",
+      "handler": "teamtailor",
+      "params": {},
+      "note": "Bitrefill careers page on Teamtailor",
+      "source": "learned",
+      "added": "2026-06-07"
+    },
+    {
+      "match": "comeet\\.com",
+      "matchType": "regex",
+      "handler": "firecrawl",
+      "params": {},
+      "note": "Comeet ATS (AngularJS SPA). No public API; no JSON-LD. Firecrawl renders the SPA and extracts full JD. URL pattern: /jobs/{org}/{company-code}/{role-slug}/{position-code}. Also served from comeet.co (same SPA).",
+      "source": "learned",
+      "added": "2026-06-07"
+    },
+    {
+      "match": "\\.breezy\\.hr",
+      "matchType": "regex",
+      "handler": "xh",
+      "params": {
+        "ats": "breezy",
+        "extraction": "jsonld",
+        "schema": "JobPosting"
+      },
+      "note": "Breezy HR ATS — full JobPosting JSON-LD embedded in static HTML page. xh GET + python3 JSON-LD extraction works. URL pattern: {tenant}.breezy.hr/p/{positionId}-{slug}. No auth required. Needs a breezy handler in fetch-jd.mjs for zero-token support.",
+      "source": "learned",
+      "added": "2026-06-07"
+    },
+    {
+      "match": "www.mews.com",
+      "matchType": "host",
+      "handler": "greenhouse",
+      "params": {
+        "org": "mews-systems"
+      },
+      "note": "Mews careers page (Next.js) fronts Greenhouse; job IDs in path /en/careers/jobs/{gh_jid}",
+      "source": "learned",
+      "added": "2026-06-08"
+    },
+    {
+      "match": "app.dover.com",
+      "matchType": "host",
+      "handler": "firecrawl",
+      "params": {},
+      "note": "Dover apply SPA (React, Cloudflare Turnstile). No public unauthenticated API — xh returns the SPA shell. Firecrawl renders full JD including role description, requirements, comp, and benefits. URL pattern: app.dover.com/apply/{org}/{uuid}/?rs={ref}. No JSON-LD. Set Fetch-method: firecrawl.",
+      "source": "learned",
+      "added": "2026-06-08"
+    },
+    {
+      "match": "apply.workable.com",
+      "matchType": "host",
+      "handler": "xh",
+      "params": {
+        "ats": "workable",
+        "mdEndpoint": "https://apply.workable.com/{account}/jobs/view/{shortcode}.md",
+        "urlPattern": "/apply.workable.com/{account}/j/{shortcode}/"
+      },
+      "note": "Workable apply subdomain. URL pattern: apply.workable.com/{account}/j/{shortcode}/. Free markdown endpoint: GET https://apply.workable.com/{account}/jobs/view/{shortcode}.md — returns clean markdown with title, location, workplace, department, description, responsibilities, requirements. No auth required. Needs a workable handler in fetch-jd.mjs for zero-token support (extract account = path[1], shortcode = path[3] from URL).",
+      "source": "learned",
+      "added": "2026-06-08"
+    },
+    {
+      "match": "careers.hostaway.com",
+      "matchType": "host",
+      "handler": "teamtailor",
+      "params": {},
+      "note": "Hostaway careers page on Recruitee (careers.recruiteecdn.com CDN). Full JobPosting JSON-LD embedded in static HTML — xh GET + python3 JSON-LD extract works (same as teamtailor). URL pattern: /o/{slug}. IMPORTANT: prose wins over JSON-LD applicantLocationRequirements country list (payroll countries, not eligibility). Set Remote scope from JD prose, not country array. Incident: #279 wrongly Skipped-Location from country list; #1415 correctly used prose EMEA. No auth required.",
+      "source": "learned",
+      "added": "2026-06-08"
     }
   ]
 }
