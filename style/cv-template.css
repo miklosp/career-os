@@ -15,6 +15,12 @@
 body {
   font-size: 9.5pt;
   line-height: 1.4;
+  /* ATS-clean text extraction: suppress fi/fl ligatures so parsers never get a
+     broken glyph (e.g. "workﬂow"). Inter delivers these via `calt`, not `liga`,
+     so the high-level `none` (which also turns off contextual) is the real
+     lever; the feature-settings line is a WeasyPrint fallback. */
+  font-variant-ligatures: none;
+  font-feature-settings: "liga" 0, "calt" 0;
 }
 
 /* --- Headings --- */
@@ -96,6 +102,12 @@ ul, ol {
 
 li {
   margin: 1pt 0;
+  /* Keep each bullet atomic: a single bullet never splits across a page break.
+     Scoped to the list item (not the whole list/role) on purpose — a broad
+     break-inside on the bullet group jumps whole roles to the next page and
+     inflates a dense CV with blank gaps. Splitting between bullets is fine. */
+  break-inside: avoid;
+  page-break-inside: avoid;
 }
 
 li::before {
