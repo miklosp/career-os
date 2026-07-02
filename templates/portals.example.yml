@@ -95,6 +95,18 @@ title_filter:
     - "Head"
     - "Director"
 
+# -- Seniority-tier skip (optional) --
+# Drops Level-1 ATS-board postings whose title matches one of these tiers
+# BEFORE they are dispatched for scoring, to cut low-signal noise. A title is
+# classified into exactly one tier (most-senior keyword wins). Absent or empty
+# => skip nothing (default; fully backward compatible).
+# Tiers: intern · junior · mid · senior · staff · lead · principal · head ·
+#        director · vp · c-level  (`mid` = plain IC titles with no seniority
+#        keyword, e.g. "Product Manager" — skip it only if you mean to).
+# NOTE: leadership (head/director/vp/c-level) is never folded into junk tiers,
+# so a list like [intern, junior] can never drop a Head of Product/Design/UX.
+# skip_tiers: [intern, junior]
+
 # -- Search queries --
 # Each query triggers a WebSearch. Use site: to filter by portal.
 # The scanner extracts title, URL, and company from results.
@@ -360,6 +372,18 @@ hiringcafe_searches:
     enabled: true
 
 tracked_companies:
+
+  # The scanner auto-detects the ATS from careers_url (no `api:` needed for
+  # these). Beyond Greenhouse/Ashby/Lever/Recruitee/Teamtailor/join.team, the
+  # following boards are scanned via their zero-auth list endpoints:
+  #   - name: Acme (Personio)
+  #     careers_url: https://acme.jobs.personio.de/     # → /xml feed
+  #   - name: Acme (SmartRecruiters)
+  #     careers_url: https://jobs.smartrecruiters.com/Acme
+  #   - name: Acme (BambooHR)
+  #     careers_url: https://acme.bamboohr.com/         # → /careers/list
+  #   - name: Acme (Breezy)
+  #     careers_url: https://acme.breezy.hr/            # → /json
 
   # -- AI Labs & LLM providers --
 

@@ -3,10 +3,18 @@
 /**
  * scan.mjs — Zero-token portal scanner
  *
- * Fetches Greenhouse, Ashby, Lever, Recruitee, Teamtailor, and join.team
- * APIs directly, applies title filters from portals.yml, deduplicates
- * against data/scan-history.db and data/applications.md, and records new
- * URLs.
+ * Fetches Greenhouse, Ashby, Lever, Recruitee, Teamtailor, join.team,
+ * Personio, SmartRecruiters, BambooHR, and Breezy APIs directly, applies
+ * title filters from portals.yml, deduplicates against data/scan-history.db
+ * and data/applications.md, and records new URLs.
+ *
+ * Zero-auth list endpoints per ATS (reverse-discovery), each emitting a
+ * canonical per-job URL that lib/fetch-jd.mjs later resolves zero-token:
+ *   personio        {tenant}.jobs.personio.de/xml       → /job/{id}
+ *   smartrecruiters api.smartrecruiters.com/v1/companies/{org}/postings
+ *                                                       → jobs.smartrecruiters.com/{org}/{id}
+ *   bamboohr        {tenant}.bamboohr.com/careers/list  → /careers/{id}
+ *   breezy          {tenant}.breezy.hr/json             → item's own `url`
  *
  * Zero Claude API tokens — pure HTTP + JSON.
  *
@@ -25,6 +33,8 @@
  *     first_seen TEXT NOT NULL,      -- YYYY-MM-DD
  *     portal     TEXT,               -- greenhouse-api | ashby-api | lever-api
  *                                    -- | recruitee-api | teamtailor-api | join_team-api
+ *                                    -- | personio-api | smartrecruiters-api
+ *                                    -- | bamboohr-api | breezy-api
  *                                    -- | linkedin-jobspy | remoteineurope | websearch — …
  *     title      TEXT,
  *     company    TEXT,
@@ -53,6 +63,7 @@ import {
   mkdirSync,
 } from "fs";
 import { resolve } from "path";
+import { pathToFileURL } from "url";
 import yaml from "js-yaml";
 import { runLinkedInScan } from "./lib/scan-linkedin.mjs";
 import { runRemoteInEuropeScan } from "./lib/scan-remoteineurope.mjs";
@@ -118,6 +129,11 @@ function detectApi(company) {
     if (a.includes("api.lever.co")) return { type: "lever", url: a };
     if (a.includes(".recruitee.com")) return { type: "recruitee", url: a };
     if (a.includes("join.team")) return { type: "join_team", url: a };
+    if (a.includes(".jobs.personio.")) return { type: "personio", url: a };
+    if (a.includes("api.smartrecruiters.com"))
+      return { type: "smartrecruiters", url: a };
+    if (a.includes(".bamboohr.com")) return { type: "bamboohr", url: a };
+    if (a.includes(".breezy.hr")) return { type: "breezy", url: a };
     if (/\/jobs\.json(?:$|\?)/.test(a)) return { type: "teamtailor", url: a };
     // Unknown api: shape — fall through to careers_url detection.
   }
@@ -169,6 +185,47 @@ function detectApi(company) {
     return {
       type: "join_team",
       url: `https://join.team/api/teams/${joinTeamMatch[1]}/jobs/jobs`,
+    };
+  }
+
+  // Personio: {tenant}.jobs.personio.{de,com}. Public XML feed lists all
+  // positions; mirror fetch-jd.mjs's proven `.de/xml` endpoint.
+  const personioMatch = url.match(
+    /https?:\/\/([^/.]+)\.jobs\.personio\.(?:de|com)/,
+  );
+  if (personioMatch) {
+    return {
+      type: "personio",
+      url: `https://${personioMatch[1]}.jobs.personio.de/xml`,
+    };
+  }
+
+  // SmartRecruiters: careers site jobs.smartrecruiters.com/{org}. Public
+  // postings API (no auth): defaults to limit=100 in one page.
+  const srMatch = url.match(/smartrecruiters\.com\/([^/?#]+)/);
+  if (srMatch) {
+    return {
+      type: "smartrecruiters",
+      url: `https://api.smartrecruiters.com/v1/companies/${srMatch[1]}/postings`,
+    };
+  }
+
+  // BambooHR: {tenant}.bamboohr.com. Public careers list → JSON.
+  const bambooMatch = url.match(/https?:\/\/([^/.]+)\.bamboohr\.com/);
+  if (bambooMatch) {
+    return {
+      type: "bamboohr",
+      url: `https://${bambooMatch[1]}.bamboohr.com/careers/list`,
+    };
+  }
+
+  // Breezy: {tenant}.breezy.hr. Public /json lists every position with its
+  // own canonical apply URL.
+  const breezyMatch = url.match(/https?:\/\/([^/.]+)\.breezy\.hr/);
+  if (breezyMatch) {
+    return {
+      type: "breezy",
+      url: `https://${breezyMatch[1]}.breezy.hr/json`,
     };
   }
 
@@ -256,6 +313,104 @@ function parseJoinTeam(json, companyName, apiUrl) {
   }));
 }
 
+// Minimal XML entity + CDATA decode for the Personio feed (titles feed the
+// title filter, dedup keys, and console output — good enough for those).
+function decodeXml(s) {
+  return (s || "")
+    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#0?39;|&apos;/g, "'")
+    .trim();
+}
+
+// Personio publishes a public XML feed at {tenant}.jobs.personio.de/xml —
+// one <position> block per role with <id>, <name>, <office> (the first
+// <office> is the primary; additionalOffices repeat the tag). No <url> in
+// the feed, so the canonical job URL is derived from tenant + id, matching
+// the shape lib/fetch-jd.mjs's personio handler resolves.
+function parsePersonio(xml, companyName, apiUrl) {
+  const tenant = (apiUrl.match(/\/\/([^/.]+)\.jobs\.personio\./) || [])[1] || "";
+  const blocks = String(xml).split(/<position>/i).slice(1);
+  return blocks
+    .map((b) => {
+      const id = (b.match(/<id>\s*(\d+)\s*<\/id>/i) || [])[1] || "";
+      const title = (b.match(/<name>([\s\S]*?)<\/name>/i) || [])[1] || "";
+      const office = (b.match(/<office>([\s\S]*?)<\/office>/i) || [])[1] || "";
+      return {
+        title: decodeXml(title),
+        url:
+          tenant && id
+            ? `https://${tenant}.jobs.personio.de/job/${id}`
+            : "",
+        company: companyName,
+        location: decodeXml(office),
+      };
+    })
+    .filter((j) => j.url);
+}
+
+// SmartRecruiters public postings API returns { content: [...] }; each item
+// carries {id, name, company.identifier, location}. The canonical posting
+// URL is jobs.smartrecruiters.com/{org}/{numericId} (fetch-jd resolves it via
+// the same org+id against the API).
+function parseSmartRecruiters(json, companyName) {
+  const postings = json.content || [];
+  return postings
+    .map((p) => {
+      const org = p.company?.identifier || "";
+      const loc = p.location || {};
+      return {
+        title: p.name || "",
+        url: org && p.id ? `https://jobs.smartrecruiters.com/${org}/${p.id}` : "",
+        company: p.company?.name || companyName,
+        location: [loc.city, loc.region, loc.country?.toUpperCase()]
+          .filter(Boolean)
+          .join(", "),
+      };
+    })
+    .filter((j) => j.url);
+}
+
+// BambooHR public careers list returns { result: [...] }; each item has
+// {id, jobOpeningName, atsLocation, location}. Canonical URL:
+// {tenant}.bamboohr.com/careers/{id}.
+function parseBambooHr(json, companyName, apiUrl) {
+  const tenant = (apiUrl.match(/\/\/([^/.]+)\.bamboohr\.com/) || [])[1] || "";
+  const results = json.result || [];
+  return results
+    .map((r) => {
+      const l = r.atsLocation || r.location || {};
+      return {
+        title: r.jobOpeningName || "",
+        url:
+          tenant && r.id
+            ? `https://${tenant}.bamboohr.com/careers/${r.id}`
+            : "",
+        company: companyName,
+        location: [l.city, l.state, l.country].filter(Boolean).join(", "),
+      };
+    })
+    .filter((j) => j.url);
+}
+
+// Breezy publishes a public JSON array at {tenant}.breezy.hr/json — each item
+// already includes its canonical `url` and a resolved location.name, so no
+// URL derivation is needed.
+function parseBreezy(json, companyName) {
+  const items = Array.isArray(json) ? json : [];
+  return items
+    .map((it) => ({
+      title: it.name || "",
+      url: it.url || "",
+      company: it.company?.name || companyName,
+      location: it.location?.name || "",
+    }))
+    .filter((j) => j.url);
+}
+
 const PARSERS = {
   greenhouse: parseGreenhouse,
   ashby: parseAshby,
@@ -263,7 +418,14 @@ const PARSERS = {
   recruitee: parseRecruitee,
   teamtailor: parseTeamtailor,
   join_team: parseJoinTeam,
+  personio: parsePersonio,
+  smartrecruiters: parseSmartRecruiters,
+  bamboohr: parseBambooHr,
+  breezy: parseBreezy,
 };
+
+// Types whose list endpoint returns text (XML), not JSON.
+const TEXT_LIST_TYPES = new Set(["personio"]);
 
 // ── Fetch with timeout ──────────────────────────────────────────────
 
@@ -274,6 +436,18 @@ async function fetchJson(url) {
     const res = await fetch(url, { signal: controller.signal });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return await res.json();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function fetchText(url) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  try {
+    const res = await fetch(url, { signal: controller.signal });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.text();
   } finally {
     clearTimeout(timer);
   }
@@ -292,6 +466,47 @@ function buildTitleFilter(titleFilter) {
     const hasNegative = negative.some((k) => lower.includes(k));
     return hasPositive && !hasNegative;
   };
+}
+
+// ── Seniority tier classifier ───────────────────────────────────────
+//
+// Deterministic keyword classifier for a posting title. Returns exactly one
+// tier so an optional `skip_tiers: [...]` in portals.yml can drop low-signal
+// postings BEFORE they are dispatched for scoring. Default (no skip_tiers)
+// changes nothing — fully backward compatible.
+//
+// Rules are ordered MOST-senior first and the first hit wins, so compound
+// titles resolve to their top rank ("Senior Director" → director,
+// "VP of Product" → vp). Word-boundary anchors avoid false hits ("intern"
+// ⊄ "internal", "lead" ⊄ "leadership").
+//
+// Leadership is the TARGET of this search, not noise: Head of Product /
+// Head of Design / Head of UX classify as `head`, and director/vp/c-level
+// are their own tiers — never folded into junior/mid — so a sane skip list
+// (e.g. [intern, junior]) can never drop a leadership role.
+//
+// Tiers: c-level · vp · director · head · principal · staff · lead · senior
+// · junior · intern · mid (default when no seniority keyword is present —
+// plain IC titles like "Product Manager"; skipping `mid` drops those).
+const TIER_RULES = [
+  ["c-level", /\b(chief|c[teofpmri]o|ciso)\b/i],
+  ["vp", /\b(vp|svp|evp|vice[\s-]?president)\b/i],
+  ["director", /\bdirector\b/i],
+  ["head", /\bhead\b/i],
+  ["principal", /\bprincipal\b/i],
+  ["staff", /\bstaff\b/i],
+  ["lead", /\blead\b/i],
+  ["senior", /\b(senior|sr\.?)\b/i],
+  ["junior", /\b(junior|jr\.?|associate|entry[\s-]?level|graduate|grad)\b/i],
+  ["intern", /\b(intern(ship)?|trainee|working\s+student|werkstudent)\b/i],
+];
+
+export function classifyTier(title) {
+  const t = title || "";
+  for (const [tier, re] of TIER_RULES) {
+    if (re.test(t)) return tier;
+  }
+  return "mid";
 }
 
 // ── Dedup ───────────────────────────────────────────────────────────
@@ -354,6 +569,12 @@ async function main() {
   const config = parseYaml(readFileSync(PORTALS_PATH, "utf-8"));
   const companies = config.tracked_companies || [];
   const titleFilter = buildTitleFilter(config.title_filter);
+  // Optional Level 1 seniority skip (portals.yml `skip_tiers`). Absent = skip
+  // nothing. Applies to the in-process ATS-board scan, where titles are known
+  // at scan time (other levels return resolved URLs, not titles).
+  const skipTiers = new Set(
+    (config.skip_tiers || []).map((t) => String(t).toLowerCase()),
+  );
 
   // 2. Filter to enabled, non-banned companies with detectable APIs
   const enabled = companies.filter((c) => c.enabled !== false);
@@ -384,6 +605,7 @@ async function main() {
   const date = new Date().toISOString().slice(0, 10);
   let totalFound = 0;
   let totalFiltered = 0;
+  let totalTierSkipped = 0;
   let totalDupes = 0;
   const newOffers = [];
   const errors = [];
@@ -391,13 +613,19 @@ async function main() {
   const tasks = targets.map((company) => async () => {
     const { type, url } = company._api;
     try {
-      const json = await fetchJson(url);
-      const jobs = PARSERS[type](json, company.name, url);
+      const raw = TEXT_LIST_TYPES.has(type)
+        ? await fetchText(url)
+        : await fetchJson(url);
+      const jobs = PARSERS[type](raw, company.name, url);
       totalFound += jobs.length;
 
       for (const job of jobs) {
         if (!titleFilter(job.title)) {
           totalFiltered++;
+          continue;
+        }
+        if (skipTiers.size && skipTiers.has(classifyTier(job.title))) {
+          totalTierSkipped++;
           continue;
         }
         if (isBanned({ url: job.url, company: job.company })) {
@@ -563,6 +791,11 @@ async function main() {
   console.log(`Companies scanned:     ${targets.length}`);
   console.log(`Total jobs found:      ${totalFound}`);
   console.log(`Filtered by title:     ${totalFiltered} removed`);
+  if (skipTiers.size) {
+    console.log(
+      `Skipped by tier:       ${totalTierSkipped} removed (skip_tiers: ${[...skipTiers].join(", ")})`,
+    );
+  }
   console.log(`Duplicates:            ${totalDupes} skipped`);
   console.log(`Banned skipped:        ${bannedSkipped}`);
   console.log(`New offers added:      ${newOffers.length}`);
@@ -717,7 +950,10 @@ async function main() {
   }
 }
 
-main().catch((err) => {
-  console.error("Fatal:", err.message);
-  process.exit(1);
-});
+// Run as CLI only; when imported (e.g. for unit tests) nothing auto-executes.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((err) => {
+    console.error("Fatal:", err.message);
+    process.exit(1);
+  });
+}
