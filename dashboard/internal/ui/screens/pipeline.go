@@ -84,6 +84,12 @@ type PipelineUpdateStatusMsg struct {
 	NewStatus     string
 }
 
+// PipelinePruneMsg requests a bulk discard of every scored app below Threshold.
+type PipelinePruneMsg struct {
+	CareerOpsPath string
+	Threshold     float64
+}
+
 // PipelineRefreshMsg requests a full tracker reload from disk.
 type PipelineRefreshMsg struct{}
 
@@ -219,6 +225,15 @@ var statusOptions = []string{"Evaluated", "Applied", "Responded", "Interview", "
 // statusGroupOrder defines display order for grouped view.
 var statusGroupOrder = []string{"interview", "offer", "responded", "applied", "evaluated", "fetched", "skipped-location", "skip", "rejected", "discarded"}
 
+// Bulk-prune threshold bounds. The modal opens at the default cutoff and the
+// user can nudge it within these bounds before confirming.
+const (
+	defaultPruneThreshold = 3.0
+	pruneThresholdStep    = 0.5
+	minPruneThreshold     = 0.5
+	maxPruneThreshold     = 5.0
+)
+
 // PipelineModel implements the career pipeline dashboard screen.
 type PipelineModel struct {
 	apps          []model.CareerApplication
@@ -241,6 +256,10 @@ type PipelineModel struct {
 	// Status picker sub-state
 	statusPicker bool
 	statusCursor int
+	// Prune confirm sub-state. pruneConfirm means the bulk-discard modal is
+	// capturing keys; pruneThreshold is the live score cutoff (discard < it).
+	pruneConfirm   bool
+	pruneThreshold float64
 	// Search sub-state. searchEditing means the input bar is capturing keys.
 	// searchQuery may persist after Enter dismisses the bar; switching tabs
 	// or pressing Esc clears it.
@@ -525,6 +544,9 @@ func (m PipelineModel) Update(msg tea.Msg) (PipelineModel, tea.Cmd) {
 		if m.statusPicker {
 			return m.handleStatusPicker(msg)
 		}
+		if m.pruneConfirm {
+			return m.handlePruneConfirm(msg)
+		}
 		if m.searchEditing {
 			return m.handleSearchInput(msg)
 		}
@@ -749,6 +771,15 @@ func (m PipelineModel) handleKey(msg tea.KeyMsg) (PipelineModel, tea.Cmd) {
 			}
 		}
 
+	case "P":
+		// Bulk prune: open the confirm modal seeded at the default cutoff.
+		// Only offered on list tabs (the modal overlays the row body) and when
+		// at least one scored, non-committed row exists.
+		if !m.onProgressTab() && len(data.AppsBelowScore(m.apps, maxPruneThreshold)) > 0 {
+			m.pruneConfirm = true
+			m.pruneThreshold = defaultPruneThreshold
+		}
+
 	case "g":
 		if app, ok := m.CurrentApp(); ok {
 			path := m.careerOpsPath
@@ -825,6 +856,41 @@ func (m PipelineModel) handleStatusPicker(msg tea.KeyMsg) (PipelineModel, tea.Cm
 					NewStatus:     newStatus,
 				}
 			}
+		}
+	}
+	return m, nil
+}
+
+// handlePruneConfirm captures keys while the bulk-prune modal is open. ↑/↓
+// nudge the score cutoff within bounds; Enter discards every matching row; Esc
+// cancels without touching anything.
+func (m PipelineModel) handlePruneConfirm(msg tea.KeyMsg) (PipelineModel, tea.Cmd) {
+	switch msg.String() {
+	case "esc", "q":
+		m.pruneConfirm = false
+		return m, nil
+
+	case "up", "k":
+		m.pruneThreshold += pruneThresholdStep
+		if m.pruneThreshold > maxPruneThreshold {
+			m.pruneThreshold = maxPruneThreshold
+		}
+
+	case "down", "j":
+		m.pruneThreshold -= pruneThresholdStep
+		if m.pruneThreshold < minPruneThreshold {
+			m.pruneThreshold = minPruneThreshold
+		}
+
+	case "enter":
+		m.pruneConfirm = false
+		path := m.careerOpsPath
+		threshold := m.pruneThreshold
+		if len(data.AppsBelowScore(m.apps, threshold)) == 0 {
+			return m, nil
+		}
+		return m, func() tea.Msg {
+			return PipelinePruneMsg{CareerOpsPath: path, Threshold: threshold}
 		}
 	}
 	return m, nil
@@ -1069,6 +1135,9 @@ func (m PipelineModel) View() string {
 	// Status picker overlay
 	if m.statusPicker {
 		body = m.overlayStatusPicker(body)
+	}
+	if m.pruneConfirm {
+		body = m.overlayPruneConfirm(body)
 	}
 
 	parts := []string{tabs}
@@ -1403,6 +1472,17 @@ func (m PipelineModel) renderHelp() string {
 		}, "  "))
 	}
 
+	if m.pruneConfirm {
+		hint := func(prefix, key, suffix string) string {
+			return text.Render(prefix) + hotkey.Render(key) + text.Render(suffix)
+		}
+		return separator + "\n" + rowStyle.Render(strings.Join([]string{
+			text.Render("↑↓/jk score"),
+			hint("", "Enter", " discard"),
+			hint("", "Esc", " cancel"),
+		}, "  "))
+	}
+
 	hint := func(prefix, key, suffix string) string {
 		return text.Render(prefix) + hotkey.Render(key) + text.Render(suffix)
 	}
@@ -1412,6 +1492,7 @@ func (m PipelineModel) renderHelp() string {
 		hint("", "a", "pply"),
 		hint("", "c", "hange"),
 		hint("", "d", "iscard"),
+		hint("", "P", "rune"),
 		hint("", "g", "enerate CV"),
 		hint("", "f", "ind"),
 		hint("", "r", "efresh"),
@@ -1470,6 +1551,42 @@ func (m PipelineModel) overlayStatusPicker(body string) string {
 	modal := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(m.theme.Blue).
+		Background(m.theme.Surface).
+		Padding(1, 2).
+		Render(strings.Join(rows, "\n"))
+
+	return lipgloss.Place(m.width, bodyHeight, lipgloss.Center, lipgloss.Center, modal)
+}
+
+func (m PipelineModel) overlayPruneConfirm(body string) string {
+	bodyLines := strings.Split(body, "\n")
+	bodyHeight := len(bodyLines)
+	if bodyHeight < 1 {
+		bodyHeight = 1
+	}
+
+	count := len(data.AppsBelowScore(m.apps, m.pruneThreshold))
+
+	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(m.theme.Red)
+	textStyle := lipgloss.NewStyle().Foreground(m.theme.Text)
+	emphStyle := lipgloss.NewStyle().Bold(true).Foreground(m.theme.Yellow)
+	hintStyle := lipgloss.NewStyle().Foreground(m.theme.Subtext)
+
+	var rows []string
+	rows = append(rows, titleStyle.Render("Prune low-scoring apps"))
+	rows = append(rows, "")
+	rows = append(rows, textStyle.Render("Discard score < ")+emphStyle.Render(fmt.Sprintf("%.1f", m.pruneThreshold)))
+	if count == 0 {
+		rows = append(rows, hintStyle.Render("Nothing to discard at this score."))
+	} else {
+		rows = append(rows, textStyle.Render("Will discard ")+emphStyle.Render(fmt.Sprintf("%d", count))+textStyle.Render(" evaluated app(s)."))
+	}
+	rows = append(rows, "")
+	rows = append(rows, hintStyle.Render("↑↓ score  Enter confirm  Esc cancel"))
+
+	modal := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(m.theme.Red).
 		Background(m.theme.Surface).
 		Padding(1, 2).
 		Render(strings.Join(rows, "\n"))

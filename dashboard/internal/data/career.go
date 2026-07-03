@@ -848,6 +848,36 @@ func StatusPriority(status string) int {
 	}
 }
 
+// pruneProtectedStatuses lists statuses the bulk prune must never touch:
+// rows already terminal or rows the user has committed to acting on.
+var pruneProtectedStatuses = map[string]bool{
+	"applied":   true,
+	"responded": true,
+	"interview": true,
+	"offer":     true,
+	"rejected":  true,
+	"discarded": true,
+	"skip":      true,
+}
+
+// AppsBelowScore returns the applications eligible for a bulk prune at the given
+// score threshold: rows carrying a real score strictly below the threshold that
+// are not in a committed or terminal state. Unscored rows (Fetched,
+// Skipped-Location) parse to a zero score and are excluded.
+func AppsBelowScore(apps []model.CareerApplication, threshold float64) []model.CareerApplication {
+	var out []model.CareerApplication
+	for _, app := range apps {
+		if app.Score <= 0 || app.Score >= threshold {
+			continue
+		}
+		if pruneProtectedStatuses[NormalizeStatus(app.Status)] {
+			continue
+		}
+		out = append(out, app)
+	}
+	return out
+}
+
 // ComputeProgressMetrics computes progress-oriented analytics from applications.
 func ComputeProgressMetrics(apps []model.CareerApplication) model.ProgressMetrics {
 	pm := model.ProgressMetrics{}

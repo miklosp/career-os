@@ -115,6 +115,25 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.pipeline = m.pipeline.WithReloadedDataAtIndex(apps, metrics, cursorIdx)
 		return m, nil
 
+	case screens.PipelinePruneMsg:
+		// Bulk-discard every scored, non-committed row below the threshold.
+		// Victims are resolved from a single parse so each row still matches by
+		// tracker number even as earlier updates rewrite the file.
+		victims := data.AppsBelowScore(data.ParseApplications(msg.CareerOpsPath), msg.Threshold)
+		for _, app := range victims {
+			if err := data.UpdateApplicationStatus(msg.CareerOpsPath, app, "Discarded"); err != nil {
+				fmt.Fprintf(os.Stderr, "WARN: prune failed for #%d: %v\n", app.Number, err)
+				continue
+			}
+			data.CleanupDiscardedFiles(msg.CareerOpsPath, app)
+		}
+		cursorIdx := m.pipeline.CursorIndex()
+		apps := data.ParseApplications(m.careerOpsPath)
+		metrics := data.ComputeMetrics(apps)
+		m.progressMetrics = data.ComputeProgressMetrics(apps)
+		m.pipeline = m.pipeline.WithReloadedDataAtIndex(apps, metrics, cursorIdx)
+		return m, nil
+
 	case screens.PipelineRefreshMsg:
 		m.reloadPipelineData()
 		cvsByNum := data.ScanOutputCVsByNum(m.careerOpsPath)

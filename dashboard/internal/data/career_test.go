@@ -122,6 +122,38 @@ func TestUpdateApplicationStatus_NotFound(t *testing.T) {
 	}
 }
 
+func TestAppsBelowScore(t *testing.T) {
+	apps := []model.CareerApplication{
+		{Number: 1, Status: "Evaluated", Score: 2.5},      // prune: scored, below, not committed
+		{Number: 2, Status: "Evaluated", Score: 3.0},      // keep: at threshold (strict <)
+		{Number: 3, Status: "Evaluated", Score: 4.2},      // keep: above
+		{Number: 4, Status: "Fetched", Score: 0},          // keep: unscored
+		{Number: 5, Status: "Skipped-Location", Score: 0}, // keep: unscored
+		{Number: 6, Status: "Applied", Score: 2.0},        // keep: committed
+		{Number: 7, Status: "Interview", Score: 1.5},      // keep: committed
+		{Number: 8, Status: "Rejected", Score: 1.0},       // keep: terminal
+		{Number: 9, Status: "Discarded", Score: 1.0},      // keep: already discarded
+		{Number: 10, Status: "SKIP", Score: 2.9},          // keep: manual skip
+		{Number: 11, Status: "Evaluated", Score: 2.9},     // prune: just below
+	}
+
+	got := AppsBelowScore(apps, 3.0)
+	gotNums := make(map[int]bool, len(got))
+	for _, a := range got {
+		gotNums[a.Number] = true
+	}
+
+	want := map[int]bool{1: true, 11: true}
+	if len(got) != len(want) {
+		t.Fatalf("AppsBelowScore returned %d apps, want %d (%v)", len(got), len(want), gotNums)
+	}
+	for n := range want {
+		if !gotNums[n] {
+			t.Errorf("expected app #%d to be pruned, but it was not", n)
+		}
+	}
+}
+
 func TestLeadingNum(t *testing.T) {
 	tests := []struct {
 		name string
