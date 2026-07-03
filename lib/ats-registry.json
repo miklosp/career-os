@@ -122,19 +122,6 @@
       "added": "2026-06-07"
     },
     {
-      "match": "jobs.smartrecruiters.com",
-      "matchType": "host",
-      "handler": "xh",
-      "params": {
-        "ats": "smartrecruiters",
-        "apiBase": "https://api.smartrecruiters.com/v1/companies",
-        "urlPattern": "/{org}/{numericId}-{slug}"
-      },
-      "note": "SmartRecruiters public postings API (no auth, no credits): GET https://api.smartrecruiters.com/v1/companies/{org}/postings/{numericId}. org = first path segment (e.g. 'Cint'), numericId = leading digits of second path segment before the first '-' (e.g. '744000127844565'). Returns full JSON: .name (title), .location (city/region/country/remote/hybrid), .releasedDate, .active, .jobAd.sections.{companyDescription,jobDescription,qualifications,additionalInformation}.text (HTML), .experienceLevel.label, .typeOfEmployment.label, .customField[] (region, team, dept, employment type). Needs a smartrecruiters handler in fetch-jd.mjs for zero-token support.",
-      "source": "learned",
-      "added": "2026-06-07"
-    },
-    {
       "match": "careers.bitrefill.com",
       "matchType": "host",
       "handler": "teamtailor",
@@ -188,13 +175,9 @@
     {
       "match": "apply.workable.com",
       "matchType": "host",
-      "handler": "xh",
-      "params": {
-        "ats": "workable",
-        "mdEndpoint": "https://apply.workable.com/{account}/jobs/view/{shortcode}.md",
-        "urlPattern": "/apply.workable.com/{account}/j/{shortcode}/"
-      },
-      "note": "Workable apply subdomain. URL pattern: apply.workable.com/{account}/j/{shortcode}/. Free markdown endpoint: GET https://apply.workable.com/{account}/jobs/view/{shortcode}.md — returns clean markdown with title, location, workplace, department, description, responsibilities, requirements. No auth required. Needs a workable handler in fetch-jd.mjs for zero-token support (extract account = path[1], shortcode = path[3] from URL).",
+      "handler": "workable",
+      "params": {},
+      "note": "Workable apply subdomain. URL pattern: apply.workable.com/{account}/j/{shortcode}/. Dedicated workable handler in fetch-jd.mjs GETs https://apply.workable.com/{account}/jobs/view/{shortcode}.md — returns clean markdown with title, subtitle (company·location), workplace, department, description. No auth required. Built-in match() fires on the host pattern so no registry override needed, but entry kept for documentation.",
       "source": "learned",
       "added": "2026-06-08"
     },
@@ -206,6 +189,143 @@
       "note": "Hostaway careers page on Recruitee (careers.recruiteecdn.com CDN). Full JobPosting JSON-LD embedded in static HTML — xh GET + python3 JSON-LD extract works (same as teamtailor). URL pattern: /o/{slug}. IMPORTANT: prose wins over JSON-LD applicantLocationRequirements country list (payroll countries, not eligibility). Set Remote scope from JD prose, not country array. Incident: #279 wrongly Skipped-Location from country list; #1415 correctly used prose EMEA. No auth required.",
       "source": "learned",
       "added": "2026-06-08"
+    },
+    {
+      "match": "careers.sitoo.com",
+      "matchType": "host",
+      "handler": "teamtailor",
+      "params": {},
+      "note": "Sitoo custom Teamtailor domain; JSON-LD embedded in page HTML",
+      "source": "learned",
+      "added": "2026-06-09"
+    },
+    {
+      "match": "jobs.workable.com",
+      "matchType": "host",
+      "handler": "xh",
+      "params": {
+        "ats": "workable-jobs",
+        "apiEndpoint": "https://jobs.workable.com/api/v1/jobs/{shortcode}",
+        "urlPattern": "/view/{shortcode}/"
+      },
+      "note": "Workable public job board (jobs.workable.com). URL pattern: /view/{shortcode}/{slug}. API: GET https://jobs.workable.com/api/v1/jobs/{shortcode} — returns full JSON: .title, .description (HTML), .requirementsSection (HTML), .benefitsSection (HTML), .workplace (remote/hybrid/onsite), .location.countryName, .locations[], .employmentType, .department, .company.title, .state (published/closed), .created, .linkoutUrl (employer ATS if set, else null). No auth required. linkoutUrl is the canonical employer URL when present; fall back to jobs.workable.com URL. Distinct from apply.workable.com which uses a different URL shape and markdown endpoint.",
+      "source": "learned",
+      "added": "2026-06-09"
+    },
+    {
+      "match": "jobb.ants.se",
+      "matchType": "host",
+      "handler": "teamtailor",
+      "params": {},
+      "note": "Custom domain fronting Teamtailor (Ants staffing agency, Sweden)",
+      "source": "learned",
+      "added": "2026-06-09"
+    },
+    {
+      "match": "jobs.smartrecruiters.com",
+      "matchType": "host",
+      "handler": "smartrecruiters",
+      "params": {},
+      "note": "SmartRecruiters public posting API: GET https://api.smartrecruiters.com/v1/companies/{org}/postings/{id}",
+      "source": "learned",
+      "added": "2026-06-10"
+    },
+    {
+      "match": "careers.treebula.se",
+      "matchType": "host",
+      "handler": "teamtailor",
+      "params": {},
+      "note": "Treebula custom domain fronting Teamtailor",
+      "source": "learned",
+      "added": "2026-06-10"
+    },
+    {
+      "match": "careers.superside.com",
+      "matchType": "host",
+      "handler": "lever",
+      "params": {
+        "org": "superside"
+      },
+      "note": "custom domain fronting Lever; job UUID embedded in page JS",
+      "source": "learned",
+      "added": "2026-06-12"
+    },
+    {
+      "match": "join.froda.se",
+      "matchType": "host",
+      "handler": "teamtailor",
+      "params": {},
+      "note": "Froda careers site on Teamtailor; JSON-LD JobPosting embedded in page",
+      "source": "learned",
+      "added": "2026-06-16"
+    },
+    {
+      "match": "www.mongodb.com",
+      "matchType": "host",
+      "handler": "greenhouse",
+      "params": {
+        "org": "mongodb"
+      },
+      "note": "MongoDB careers page fronting Greenhouse; job IDs in URL path /careers/jobs/{id} map directly to gh_jid",
+      "source": "learned",
+      "added": "2026-06-16"
+    },
+    {
+      "match": "emp.jobylon.com",
+      "matchType": "host",
+      "handler": "xh",
+      "params": {
+        "ats": "jobylon",
+        "extraction": "jsonld",
+        "schema": "JobPosting"
+      },
+      "note": "Jobylon ATS employer-facing domain (emp.jobylon.com). Full JobPosting JSON-LD embedded in static HTML page. xh GET + python3 JSON-LD extraction works. URL pattern: /jobs/{id}-{company-slug}-{role-slug}. No auth required.",
+      "source": "learned",
+      "added": "2026-06-24"
+    },
+    {
+      "match": "pmsforhire.com",
+      "matchType": "host",
+      "handler": "xh",
+      "params": {
+        "ats": "jboard",
+        "extraction": "jsonld",
+        "schema": "JobPosting"
+      },
+      "note": "pmsforhire.com is a jboard.io-powered aggregator. Full JobPosting JSON-LD embedded in static HTML page — xh GET + python3 JSON-LD extraction works (second <script type=application/ld+json> block; first is a WebPage type). URL pattern: /jobs/{numericId}-{role-slug}. Apply link goes to /jobs/{numericId}/apply which redirects to employer ATS; however the employer ATS URL is NOT in the JSON-LD or page source — must follow the redirect or check the employer ATS separately. hiringOrganization.name gives the employer name. No auth required. Note: aggregator validThrough dates may outlive the actual posting at the employer ATS.",
+      "source": "learned",
+      "added": "2026-06-24"
+    },
+    {
+      "match": "unity.com",
+      "matchType": "host",
+      "handler": "greenhouse",
+      "params": {
+        "org": "unity3d"
+      },
+      "note": "Unity Technologies custom domain fronting Greenhouse",
+      "source": "learned",
+      "added": "2026-06-25"
+    },
+    {
+      "match": "career.curamando.com",
+      "matchType": "host",
+      "handler": "teamtailor",
+      "params": {},
+      "note": "custom domain fronting Teamtailor",
+      "source": "learned",
+      "added": "2026-07-01"
+    },
+    {
+      "match": "imubit.com",
+      "matchType": "host",
+      "handler": "greenhouse",
+      "params": {
+        "org": "imubit"
+      },
+      "note": "custom careers page fronting Greenhouse; query param gh_jid maps to boards-api.greenhouse.io/v1/boards/imubit/jobs/{id}",
+      "source": "learned",
+      "added": "2026-07-02"
     }
   ]
 }
