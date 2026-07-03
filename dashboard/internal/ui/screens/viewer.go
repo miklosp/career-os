@@ -34,8 +34,15 @@ type ViewerGenerateCVMsg struct{}
 type ViewerChangeStatusMsg struct{}
 
 // ViewerModel implements an integrated file viewer screen.
+//
+// lines holds the raw source lines; visualLines holds those re-flowed and
+// styled to the current width, and is what the viewport scrolls over. Long
+// prose lines are word-wrapped so nothing runs off the right edge, and the
+// whole thing is recomputed whenever the width changes (see recomputeVisual).
 type ViewerModel struct {
 	lines        []string
+	visualLines  []string
+	wrappedWidth int
 	title        string
 	scrollOffset int
 	width        int
@@ -50,13 +57,15 @@ func NewViewerModel(t theme.Theme, path, title string, width, height int) Viewer
 		content = []byte("Error reading file: " + err.Error())
 	}
 
-	return ViewerModel{
+	m := ViewerModel{
 		lines:  strings.Split(string(content), "\n"),
 		title:  title,
 		width:  width,
 		height: height,
 		theme:  t,
 	}
+	m.recomputeVisual()
+	return m
 }
 
 func (m ViewerModel) Init() tea.Cmd {
@@ -66,6 +75,25 @@ func (m ViewerModel) Init() tea.Cmd {
 func (m *ViewerModel) Resize(width, height int) {
 	m.width = width
 	m.height = height
+	if m.wrappedWidth != width {
+		m.recomputeVisual()
+	}
+	m.clampScroll()
+}
+
+// clampScroll keeps the scroll offset within the current document bounds, e.g.
+// after a resize shrinks the wrapped document or grows the viewport.
+func (m *ViewerModel) clampScroll() {
+	maxScroll := len(m.visualLines) - m.bodyHeight()
+	if maxScroll < 0 {
+		maxScroll = 0
+	}
+	if m.scrollOffset > maxScroll {
+		m.scrollOffset = maxScroll
+	}
+	if m.scrollOffset < 0 {
+		m.scrollOffset = 0
+	}
 }
 
 func (m ViewerModel) Update(msg tea.Msg) (ViewerModel, tea.Cmd) {
@@ -76,7 +104,7 @@ func (m ViewerModel) Update(msg tea.Msg) (ViewerModel, tea.Cmd) {
 			return m, func() tea.Msg { return ViewerClosedMsg{} }
 
 		case "down", "j":
-			maxScroll := len(m.lines) - m.bodyHeight()
+			maxScroll := len(m.visualLines) - m.bodyHeight()
 			if maxScroll < 0 {
 				maxScroll = 0
 			}
@@ -91,7 +119,7 @@ func (m ViewerModel) Update(msg tea.Msg) (ViewerModel, tea.Cmd) {
 
 		case "pgdown", "ctrl+d":
 			jump := m.bodyHeight() / 2
-			maxScroll := len(m.lines) - m.bodyHeight()
+			maxScroll := len(m.visualLines) - m.bodyHeight()
 			if maxScroll < 0 {
 				maxScroll = 0
 			}
@@ -111,7 +139,7 @@ func (m ViewerModel) Update(msg tea.Msg) (ViewerModel, tea.Cmd) {
 			m.scrollOffset = 0
 
 		case "end":
-			maxScroll := len(m.lines) - m.bodyHeight()
+			maxScroll := len(m.visualLines) - m.bodyHeight()
 			if maxScroll < 0 {
 				maxScroll = 0
 			}
@@ -139,6 +167,10 @@ func (m ViewerModel) Update(msg tea.Msg) (ViewerModel, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+		if m.wrappedWidth != m.width {
+			m.recomputeVisual()
+		}
+		m.clampScroll()
 	}
 
 	return m, nil
@@ -183,8 +215,8 @@ func (m ViewerModel) renderHeader() string {
 				strings.Join([]string{
 					func() string {
 						s := m.scrollOffset + 1
-						if s > len(m.lines) {
-							s = len(m.lines)
+						if s > len(m.visualLines) {
+							s = len(m.visualLines)
 						}
 						return string(rune('0'+s/100%10)) + string(rune('0'+s/10%10)) + string(rune('0'+s%10))
 					}(),
@@ -192,7 +224,7 @@ func (m ViewerModel) renderHeader() string {
 			)),
 			"/",
 			func() string {
-				t := len(m.lines)
+				t := len(m.visualLines)
 				return string(rune('0'+t/100%10)) + string(rune('0'+t/10%10)) + string(rune('0'+t%10))
 			}(),
 		}, ""),
@@ -201,11 +233,11 @@ func (m ViewerModel) renderHeader() string {
 	_ = lineInfo
 
 	scroll := right.Render(func() string {
-		if len(m.lines) == 0 {
+		if len(m.visualLines) == 0 {
 			return ""
 		}
 		pct := 0
-		maxScroll := len(m.lines) - m.bodyHeight()
+		maxScroll := len(m.visualLines) - m.bodyHeight()
 		if maxScroll > 0 {
 			pct = m.scrollOffset * 100 / maxScroll
 		}
@@ -233,47 +265,16 @@ func (m ViewerModel) renderBody() string {
 	bh := m.bodyHeight()
 	padStyle := lipgloss.NewStyle().Padding(0, 2)
 
-	if len(m.lines) == 0 {
+	if len(m.visualLines) == 0 {
 		emptyStyle := lipgloss.NewStyle().Foreground(m.theme.Subtext)
 		return padStyle.Render(emptyStyle.Render("(empty file)"))
 	}
 
 	end := m.scrollOffset + bh
-	if end > len(m.lines) {
-		end = len(m.lines)
+	if end > len(m.visualLines) {
+		end = len(m.visualLines)
 	}
-	visible := m.lines[m.scrollOffset:end]
-
-	// Render with table block detection
-	var styled []string
-	i := 0
-	for i < len(visible) {
-		if isTableLine(visible[i]) {
-			// Collect consecutive table lines
-			tableStart := i
-			for i < len(visible) && isTableLine(visible[i]) {
-				i++
-			}
-			tableLines := visible[tableStart:i]
-
-			// Also look ahead in full document for remaining table rows
-			// that may be just beyond the visible window, to get correct column widths
-			fullTableStart := m.scrollOffset + tableStart
-			fullTableEnd := fullTableStart
-			for fullTableEnd < len(m.lines) && isTableLine(m.lines[fullTableEnd]) {
-				fullTableEnd++
-			}
-			fullTable := m.lines[fullTableStart:fullTableEnd]
-
-			// Compute column widths from the full table, render only visible rows
-			colWidths := computeColumnWidths(fullTable, m.width-6)
-			rendered := m.renderTableBlock(tableLines, colWidths, fullTableStart)
-			styled = append(styled, rendered...)
-		} else {
-			styled = append(styled, m.styleLine(visible[i]))
-			i++
-		}
-	}
+	styled := append([]string(nil), m.visualLines[m.scrollOffset:end]...)
 
 	// Pad to fill height
 	for len(styled) < bh {
@@ -281,6 +282,38 @@ func (m ViewerModel) renderBody() string {
 	}
 
 	return padStyle.Render(strings.Join(styled, "\n"))
+}
+
+// recomputeVisual re-flows the raw document into width-fitted, styled visual
+// lines. Tables are rendered as fixed-width blocks (already shrunk to fit by
+// computeColumnWidths); every other line is word-wrapped by styleLines so long
+// prose no longer runs off the right edge. Called on load and whenever the
+// width changes.
+func (m *ViewerModel) recomputeVisual() {
+	m.wrappedWidth = m.width
+	width := m.width - 4 // matches renderBody's Padding(0, 2)
+	if width < 8 {
+		width = 8
+	}
+	m.visualLines = m.visualLines[:0]
+
+	i := 0
+	for i < len(m.lines) {
+		if isTableLine(m.lines[i]) {
+			start := i
+			for i < len(m.lines) && isTableLine(m.lines[i]) {
+				i++
+			}
+			block := m.lines[start:i]
+			colWidths := computeColumnWidths(block, m.width-6)
+			m.visualLines = append(m.visualLines, m.renderTableBlock(block, colWidths, start)...)
+			continue
+		}
+		m.visualLines = append(m.visualLines, m.styleLines(m.lines[i], width)...)
+		i++
+	}
+
+	m.clampScroll()
 }
 
 // isTableLine checks if a line is part of a markdown table.
@@ -485,66 +518,107 @@ func (m ViewerModel) renderTableBlock(lines []string, colWidths []int, firstLine
 
 var reBold = regexp.MustCompile(`\*\*([^*]+)\*\*`)
 
+// styleLine renders one source line as a single styled string. Kept for the
+// table-block fallback path; the scrolling body uses styleLines instead.
 func (m ViewerModel) styleLine(line string) string {
+	return strings.Join(m.styleLines(line, m.width-4), "\n")
+}
+
+// styleLines renders one source line into one or more fully-styled visual
+// lines, each no wider than width columns. A wrapped line's continuations get a
+// hanging indent that aligns under the content, and every returned line is
+// self-contained (opens and closes its own SGR) so the viewport can start
+// scrolling at any visual line without losing color.
+func (m ViewerModel) styleLines(line string, width int) []string {
+	if width < 8 {
+		width = 8
+	}
 	trimmed := strings.TrimSpace(line)
 
-	// H1 — render without the "# " prefix
-	if strings.HasPrefix(trimmed, "# ") && !strings.HasPrefix(trimmed, "## ") {
-		content := strings.TrimPrefix(trimmed, "# ")
-		return lipgloss.NewStyle().
-			Bold(true).
-			Foreground(m.theme.Blue).
-			Render("  " + content)
-	}
-	// H2 — render without the "## " prefix
-	if strings.HasPrefix(trimmed, "## ") && !strings.HasPrefix(trimmed, "### ") {
-		content := strings.TrimPrefix(trimmed, "## ")
-		return lipgloss.NewStyle().
-			Bold(true).
-			Foreground(m.theme.Mauve).
-			Render("  " + content)
-	}
-	// H3 — render without the "### " prefix
-	if strings.HasPrefix(trimmed, "### ") {
-		content := strings.TrimPrefix(trimmed, "### ")
-		return lipgloss.NewStyle().
-			Bold(true).
-			Foreground(m.theme.Sky).
-			Render("  " + content)
-	}
-	// Horizontal rule
+	// Horizontal rule — generated at the target width, never wrapped.
 	if trimmed == "---" || trimmed == "***" {
-		return lipgloss.NewStyle().
-			Foreground(m.theme.Overlay).
-			Render(strings.Repeat("─", m.width-4))
+		return []string{lipgloss.NewStyle().Foreground(m.theme.Overlay).Render(strings.Repeat("─", width))}
 	}
-	// Blockquote
-	if strings.HasPrefix(trimmed, "> ") {
-		content := strings.TrimPrefix(trimmed, "> ")
+
+	// Leading whitespace (nested lists) is preserved as a plain indent.
+	lead := line[:len(line)-len(strings.TrimLeft(line, " \t"))]
+
+	// Decompose the line into: a styled marker shown on the first visual line, a
+	// hanging indent applied to continuations, the plain content to wrap, and a
+	// styler applied to each wrapped content segment.
+	var marker, hang, content string
+	var styleFn func(string) string
+
+	switch {
+	case strings.HasPrefix(trimmed, "# ") && !strings.HasPrefix(trimmed, "## "):
+		marker, hang, content = "  ", "  ", strings.TrimPrefix(trimmed, "# ")
+		styleFn = func(s string) string {
+			return lipgloss.NewStyle().Bold(true).Foreground(m.theme.Blue).Render(s)
+		}
+	case strings.HasPrefix(trimmed, "## ") && !strings.HasPrefix(trimmed, "### "):
+		marker, hang, content = "  ", "  ", strings.TrimPrefix(trimmed, "## ")
+		styleFn = func(s string) string {
+			return lipgloss.NewStyle().Bold(true).Foreground(m.theme.Mauve).Render(s)
+		}
+	case strings.HasPrefix(trimmed, "### "):
+		marker, hang, content = "  ", "  ", strings.TrimPrefix(trimmed, "### ")
+		styleFn = func(s string) string {
+			return lipgloss.NewStyle().Bold(true).Foreground(m.theme.Sky).Render(s)
+		}
+	case strings.HasPrefix(trimmed, "> "):
 		border := lipgloss.NewStyle().Foreground(m.theme.Overlay).Render("▎ ")
-		text := lipgloss.NewStyle().Foreground(m.theme.Subtext).Italic(true).Render(content)
-		return border + text
-	}
-	// Bold fields like **Score:** 4.0/5 — render with bold label, strip asterisks
-	if strings.HasPrefix(trimmed, "**") && strings.Contains(trimmed, ":**") {
-		return m.renderInlineBold(line, m.theme.Yellow)
-	}
-	// Bullet points and numbered lists
-	if strings.HasPrefix(trimmed, "- ") || strings.HasPrefix(trimmed, "* ") {
-		return m.renderInlineBold(line, m.theme.Text)
-	}
-	if len(trimmed) > 2 && trimmed[0] >= '0' && trimmed[0] <= '9' && strings.Contains(trimmed[:3], ".") {
-		return m.renderInlineBold(line, m.theme.Text)
+		marker, hang, content = border, border, strings.TrimPrefix(trimmed, "> ")
+		styleFn = func(s string) string {
+			return lipgloss.NewStyle().Foreground(m.theme.Subtext).Italic(true).Render(s)
+		}
+	case strings.HasPrefix(trimmed, "**") && strings.Contains(trimmed, ":**"):
+		// Bold fields like **Score:** 4.0/5 — keep the markers for renderInlineBold.
+		marker, hang, content = lead, lead, trimmed
+		styleFn = func(s string) string { return m.renderInlineBold(s, m.theme.Yellow) }
+	case strings.HasPrefix(trimmed, "- ") || strings.HasPrefix(trimmed, "* "):
+		bullet := lipgloss.NewStyle().Foreground(m.theme.Text).Render(trimmed[:2])
+		marker, hang, content = lead+bullet, lead+"  ", trimmed[2:]
+		styleFn = func(s string) string { return m.renderInlineBold(s, m.theme.Text) }
+	case numberedMarker(trimmed) > 0:
+		n := numberedMarker(trimmed)
+		mk := lipgloss.NewStyle().Foreground(m.theme.Text).Render(trimmed[:n])
+		marker, hang, content = lead+mk, lead+strings.Repeat(" ", n), trimmed[n:]
+		styleFn = func(s string) string { return m.renderInlineBold(s, m.theme.Text) }
+	default:
+		marker, hang, content = lead, lead, strings.TrimLeft(line, " \t")
+		styleFn = func(s string) string { return m.renderInlineBold(s, m.theme.Subtext) }
 	}
 
-	// Default — still check for inline bold
-	if strings.Contains(trimmed, "**") {
-		return m.renderInlineBold(line, m.theme.Subtext)
+	contentWidth := width - lipgloss.Width(hang)
+	if contentWidth < 4 {
+		contentWidth = 4
 	}
 
-	return lipgloss.NewStyle().
-		Foreground(m.theme.Subtext).
-		Render(line)
+	segs := wrapPlainLine(content, contentWidth)
+	out := make([]string, 0, len(segs))
+	for i, seg := range segs {
+		if i == 0 {
+			out = append(out, marker+styleFn(seg))
+		} else {
+			out = append(out, hang+styleFn(seg))
+		}
+	}
+	return out
+}
+
+// numberedMarker returns the byte length of an ordered-list "N. " marker at the
+// start of trimmed (e.g. 3 for "1. "), or 0 if it is not an ordered-list item.
+func numberedMarker(trimmed string) int {
+	idx := strings.Index(trimmed, ". ")
+	if idx <= 0 {
+		return 0
+	}
+	for _, r := range trimmed[:idx] {
+		if r < '0' || r > '9' {
+			return 0
+		}
+	}
+	return idx + 2
 }
 
 // renderInlineBold renders a line with **bold** segments highlighted.
