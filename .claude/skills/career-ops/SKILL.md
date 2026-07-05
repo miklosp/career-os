@@ -8,6 +8,8 @@ argument-hint: "[scan | apply | cv | cover-letter | storybank | interview-prep |
 
 # career-ops -- Router
 
+> **Mode-file paths are repo-root-relative.** Every `modes/…` reference in this file resolves from the working directory, i.e. the repo root (`modes/apply.md` → `<repo-root>/modes/apply.md`) — **never** relative to this skill's folder. `.claude/skills/career-ops/` holds only this `SKILL.md`; there is no `modes/` beside it.
+
 ## Mode Routing
 
 Determine the mode from `{{mode}}`:
@@ -25,6 +27,7 @@ Determine the mode from `{{mode}}`:
 | `practice` (optional `--type ...`, `--story S0XX`) | `practice` |
 | `mock` (optional `--company ...`, `--round-type ...`, `--length ...`) | `mock` |
 | `analyze --transcript {path}` (optional `--company ...`) | `analyze` |
+| `onboarding` | `onboarding` -- first-run setup (also auto-triggered when a required config file is missing; see `CLAUDE.md`) |
 
 **Auto-pipeline detection:** If `{{mode}}` is not a known sub-command, treat it as input to the pipeline:
 
@@ -79,7 +82,7 @@ Read `modes/{mode}.md` — each mode is self-contained and pulls any shared
 standard via an explicit path reference inside it (e.g. `apply` references
 `modes/_writing.md` for candidate-facing text).
 
-Applies to: `apply`, `scan`, `tracker`, `interview-prep`.
+Applies to: `apply`, `scan`, `interview-prep`, `cover-letter`, `storybank`, `practice`, `mock`, `analyze`, `onboarding`.
 
 ### Delegating to subagents
 
