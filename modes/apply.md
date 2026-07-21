@@ -15,6 +15,8 @@ The dispatch names everything this mode needs. Read what you are given; do **not
 
 If a required input is missing — no report path, no form URL — **ask the user** for it. Do not go searching. The single exception: if no CV PDF path was given, you may check `output/customized-cvs/{NUM}-*-cv.pdf` once; if nothing is there, tell the user this application has no customized CV yet and ask how to proceed.
 
+**No reviewed CV yet (PDF ❌)?** When that check turns up no CV PDF, offer `/career-ops tailor {NUM}` before form-filling — it tailors the CV against the JD, walks the fact-check review, and renders the PDF, then hands back here. Proceeding without one is fine if the user prefers the generic CV; don't block on it.
+
 ## Browser prerequisite
 
 Apply is the **one** mode that prefers the **cmux browser** over agent-browser. Decide once at the start of the flow and stick to it for the whole session:

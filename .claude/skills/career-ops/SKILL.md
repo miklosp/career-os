@@ -3,7 +3,7 @@ name: career-ops
 description: AI job search command center -- evaluate offers, generate CVs, scan portals, track applications, interview practice
 user_invocable: true
 args: mode
-argument-hint: "[scan | apply | cv | cover-letter | storybank | interview-prep | practice | mock | analyze]"
+argument-hint: "[scan | apply | tailor | cv | cover-letter | storybank | interview-prep | practice | mock | analyze]"
 ---
 
 # career-ops -- Router
@@ -20,6 +20,7 @@ Determine the mode from `{{mode}}`:
 | One or more URLs (no sub-command) | **`auto-pipeline`** — fan out one background agent per URL |
 | `scan` | `scan` |
 | `apply` | `apply` |
+| `tailor` (optional `{NUM}` / company / URL) | `tailor` |
 | `cv` (optional `optimize`) | `cv` |
 | `cover-letter` (optional `{NUM}` or pasted JD) | `cover-letter` |
 | `storybank` (optional `review` / `add` / `status`) | `storybank` |
@@ -48,6 +49,7 @@ career-ops -- Command Center
   /career-ops {url...}       → fetch + location-gate + score each URL in parallel (background)
   /career-ops scan           → discover new offers across portals (prints URLs to dispatch)
   /career-ops apply          → live application assistant (reads form + drafts answers)
+  /career-ops tailor {NUM}   → interactive per-application CV: criteria → evidence → generate → review → PDF
   /career-ops cover-letter   → one-page cover letter PDF for an application (+ paste-ready text)
   /career-ops interview-prep → company-specific interview prep (research artifact)
 
@@ -82,7 +84,7 @@ Read `modes/{mode}.md` — each mode is self-contained and pulls any shared
 standard via an explicit path reference inside it (e.g. `apply` references
 `modes/_writing.md` for candidate-facing text).
 
-Applies to: `apply`, `scan`, `interview-prep`, `cover-letter`, `storybank`, `practice`, `mock`, `analyze`, `onboarding`.
+Applies to: `apply`, `tailor`, `scan`, `interview-prep`, `cover-letter`, `storybank`, `practice`, `mock`, `analyze`, `onboarding`.
 
 ### Delegating to subagents
 
