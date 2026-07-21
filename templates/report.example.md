@@ -51,25 +51,20 @@ and config/story-bank.md instead. Match the JD's language.
 
 Apply within the week. Lead the cover letter with the 0→1 evals/tracing roadmap line and the "first PM hire" org-building story; pre-empt the pricing gap with the freemium-conversion story-bank entry.
 
-### Extracted Keywords
+### ATS Targets
 
-- LLM observability
-- Evals / evaluation frameworks
-- Tracing
-- Pipelines
-- Product strategy
-- 0 to 1
-- Developer tooling
-- Platform roadmap
+Must cover (JD requirements validated by Block A; canonical term first):
+- Product strategy — [src: secberus-b1]
+- LLM observability — [src: secberus-b1]
+- Tracing — [src: secberus-b2]
+- 0 to 1 — [src: secberus-b1]
+- Developer tooling — [src: secberus-b3]
+
+Bridge vocabulary (CV term ↔ JD term; the CV keeps the conservative side):
+- "Evals" ↔ "Evaluation frameworks"
+- "Discovery-to-delivery" ↔ "Product discovery"
+
+Do not claim (Block-A gaps; absence is intentional):
 - Usage-based pricing
-- Discovery to delivery
-- PM function build-out
-- Series B
-- Engineering-team customers
-- Roadmap ownership
-- Stakeholder management
-- Go-to-market
-- Enterprise readiness
-- Founder-led product
-- Remote EU
-- Product-led growth
+- Enterprise procurement
+- Security review

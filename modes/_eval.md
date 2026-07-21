@@ -51,7 +51,7 @@ column there) — do NOT put a `**PDF:**` line in the report header, it goes sta
 
 
 Then the four scored blocks in narrative form, followed by Recommended
-Next Step and Extracted Keywords. Each block: 3–6 short bullets, no
+Next Step and ATS Targets. Each block: 3–6 short bullets, no
 tables. Each block carries its own `— X/5` score in the header. There is
 **no Block E section and no Block F section** — the global score is the
 `**Score:**` header value (computed silently, never shown as a
@@ -123,10 +123,42 @@ decent, apply only with a specific reason · below 3.5 recommend against
 One sentence. `Apply within a week.` / `Draft CV and wait on the intro
 call.` / `Skip — IC scope misalignment.` Do not hedge.
 
-### Extracted Keywords
+### ATS Targets
 
-A simple bulleted list of 15–20 JD keywords (tech, methodology, tool
-names, buzzwords) for ATS optimisation when generating the PDF later.
+The ATSes these roles use (Ashby, Greenhouse) judge the CV with an LLM
+against per-criterion evidence, not keyword density. Downstream the CV
+generator places each must-cover term as evidence inside one cited
+bullet — hitting a term once, verifiably, is the goal.
+
+Three subsections, exact intro wording, `- ` bullets:
+
+- **Must cover** — 5–12 items. ONLY JD requirements Block A validated as a
+  Match. Each = the JD's canonical noun-phrase for the skill/tool/method/
+  domain (e.g. "Kubernetes", "product discovery", "B2B SaaS"), ending with
+  that match's Block-A `[src: id]`. Exclude company product names ("Coder
+  Agents"), culture/behaviour traits ("bias for action"), JD meta-phrases
+  ("0 to GA to scale"), logistics/comp terms ("full-remote global").
+- **Bridge vocabulary** — 0–6 pairs where the CV uses one term and the JD a
+  related one (`"Agile" ↔ "Scrum"`); feeds the CV generator's bridge
+  mechanism, which keeps the conservative CV side.
+- **Do not claim** — the distinctive terms of Block-A gaps, so downstream
+  tools know their absence from the CV is intentional (the fact-check
+  audit reports them as correctly absent, and flags them if present).
+
+```markdown
+### ATS Targets
+
+Must cover (JD requirements validated by Block A; canonical term first):
+- Kubernetes — [src: weave-works-head-of-user-experience-b4]
+- Product discovery — [src: S025]
+
+Bridge vocabulary (CV term ↔ JD term; the CV keeps the conservative side):
+- "Agile" ↔ "Scrum"
+
+Do not claim (Block-A gaps; absence is intentional):
+- Pricing strategy
+- Open-core
+```
 
 ## Tracker TSV drop
 
