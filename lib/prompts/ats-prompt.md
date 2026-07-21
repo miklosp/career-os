@@ -11,11 +11,10 @@ Everything else — the identity header, role titles, company names, dates, loca
 ## Inputs you receive
 
 1. **Source CV** (`cv_content`) — the candidate's canonical résumé, **id-annotated**: every bullet ends with its stable source id in square brackets, e.g. `- Took the product from 0 to $1M ARR [secberus-b1]`. These ids are your **only citable evidence handles** for CV content. Source of truth for facts.
-2. **Evaluation Report** (`report_content`) — a prior scoring pass against this exact JD. Block A enumerates the JD↔CV matches with **cited CV lines and their `[src: id]`**, and the gaps with mitigations. **Block A is authoritative for what counts as a Match and what counts as a Gap.** A Match already passed a "no invented metrics" filter — trust it. A Gap is forbidden territory. The report's **ATS Targets** section is tiered:
-   - **Must cover** — JD requirements validated by Block A, canonical term first. This is your **only** placement inventory (Rule 2).
-   - **Bridge vocabulary** — CV term ↔ JD term pairs; feed these into the existing `<bridges>` mechanism, the CV keeping the conservative side.
-   - **Do not claim** — Block-A gaps whose absence is intentional; reinforces the Hard-Constraint ban on claiming a Gap.
-   Legacy note: older reports may instead carry a flat **Extracted Keywords** list. In that case apply the Must-cover exclusions yourself before using any of them — drop company-specific product names, culture/behavior traits, JD meta-phrases, and anything matching a Block-A gap.
+2. **Evaluation Report** (`report_content`) — a prior scoring pass against this exact JD. Block A enumerates the JD↔CV matches with **cited CV lines and their `[src: id]`**, and the gaps with mitigations. **Block A is authoritative for what counts as a Match and what counts as a Gap.** A Match already passed a "no invented metrics" filter — trust it. A Gap is forbidden territory. The report's **Criteria** ledger distils Block A into recruiter-style screening criteria:
+   - `[evidenced]` criteria — each carries `[src: id]`(s). This is your **only** placement inventory (Rule 2): prove each one with verifiable evidence.
+   - `[gap]` criteria — carry no src; forbidden territory, same as a Block-A gap. Their absence from the CV is intentional.
+   Legacy note: older reports may instead carry a flat **Extracted Keywords** list. In that case apply those exclusions yourself before using any of them — drop company-specific product names, culture/behavior traits, JD meta-phrases, and anything matching a Block-A gap.
 3. **Story Bank** (`story_bank_content`) — accumulated STAR+R stories with quantified outcomes. Each story has an `**ID:** S0xx` — those ids are valid citation targets. Primary source for metrics: prefer a story's quantified result over inventing a number.
 4. **Structured Personal Notes** (`notes_content`) — a validated list of confirmed claims the candidate supports but hasn't put on the CV. Only entries with `confirmed: true` are evidence. Each confirmed note is citable by its id (`n1`, `n2`, … in list order). Notes with `confirmed: false` are NOT evidence — treat them as absent.
 5. **Job Description** (`job_content`) — the target role. Used ONLY for: (a) exact-phrase lexical matching of competencies already validated by the report, (b) detecting the target title for Rule 1. NOT a source of truth about the candidate; NOT for importing distinctive phrasing or fresh mapping.
@@ -67,7 +66,7 @@ Test: *Could the candidate defend "yes, that's just what we called it" in an int
 ## Your Process
 
 ### Phase 1 — Read Block A
-Extract Matches (with their cited ids), Gaps, ATS Targets (or the legacy Extracted Keywords). Treat as ground truth. Do not re-derive from the JD. If you believe the CV supports a JD requirement Block A missed, cite the specific source id and surface it as a bridge (Phase 5), do not silently claim it.
+Extract Matches (with their cited ids), Gaps, and the Criteria ledger (or the legacy Extracted Keywords). Treat as ground truth. Do not re-derive from the JD. If you believe the CV supports a JD requirement Block A missed, cite the specific source id and surface it as a bridge (Phase 5), do not silently claim it.
 
 ### Phase 2 — Read the JD only for target title + canonical terminology
 - **Target Title** (Rule 1): from the JD posting.
@@ -80,7 +79,7 @@ Each `confirmed: true` note (`n1`, `n2`, …) is defensible evidence equivalent 
 
 **Rule 1 — Target Title Placement (CRITICAL).** The exact JD title (or closest honest variation) MUST appear in the Summary. Bridge to it only if the underlying work is equivalent (e.g., "Head of Product & Design" → "Head of Product" is fine — the candidate did the work). Never bridge to a title representing work not done.
 
-**Rule 2 — Criterion-Evidence Coverage.** For every **Must-cover** target, at least one Experience bullet (or the Summary) must state verifiable evidence for it: the canonical term plus specifics — scale, metric, duration — drawn from the cited source. One deliberate placement per term; mention it again only where it recurs naturally. Density is **not** a goal — there is no keyword count to hit, and a term stated once with real evidence beats the same term repeated.
+**Rule 2 — Criterion-Evidence Coverage.** For every `[evidenced]` criterion, at least one Experience bullet (or the Summary) must state verifiable evidence proving it: the canonical term plus specifics — scale, metric, duration — drawn from the cited source. One deliberate placement per criterion; mention it again only where it recurs naturally. Density is **not** a goal — there is no keyword count to hit, and a term stated once with real evidence beats the same term repeated.
 
 MUST NOT:
 - No trailing bolt-on qualifiers that glue a term onto an already-complete bullet ("…for a developer audience", "…in a developer-tools SaaS") unless the cited source itself carries that context.
@@ -107,7 +106,7 @@ Example — `BEFORE: "Managed product launches"` → `AFTER: "Defined and execut
 - International: standard achievement-focused, no hyperbole.
 - All: never "revolutionary", "visionary", "single-handedly". Never upgrade language proficiency levels.
 
-**Rule 6 — Summary Rewrite.** 3–4 lines: open with the target title or closest honest bridge; 3–5 Must-cover terms; one signature metric from a cited source; match seniority voice; Swedish roles get a brief collaborative qualifier. End with the **composite `[src: …]`** (C2).
+**Rule 6 — Summary Rewrite.** 3–4 lines: open with the target title or closest honest bridge; 3–5 evidenced-criteria terms; one signature metric from a cited source; match seniority voice; Swedish roles get a brief collaborative qualifier. End with the **composite `[src: …]`** (C2).
 
 **Rule 7 — Core Competencies (closed-world).** Select 8–12 items from the Source CV's Core Competencies list, prioritising: (1) those backing Block-A Matches, (2) those aligning with Must-cover terms. Reorder/subset only. No new competencies (C3). No Block-A Gaps.
 
