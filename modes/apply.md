@@ -136,6 +136,12 @@ Classify each question:
 
 **MANDATORY: every free-text answer goes through the two passes below before it enters the form.** Short factual fields (name, phone, LinkedIn URL, Yes/No, dropdowns) are exempt. Everything the reviewer actually reads — cover notes, "why us", "why you", "tell us about a project", custom long-answer questions — gets both passes. The standards are in-repo; this mode is self-contained and depends on no external skill.
 
+**Before drafting: answer the literal question, and stop.** A form field is not a mini-cover-letter. Map the answer to exactly what was asked and cut the rest:
+
+- Decompose the question into its parts and answer only those. "Describe the product you're most proud of and its impact" asks for *what it was* and *what changed* — nothing else. Method ("I started from research:"), process, and reflection ("the lesson that stuck is...") answer questions the field did not ask; delete them unless the field explicitly asks for how or what-you-learned.
+- A credibility signal can ride along, but sparingly — at most one, and never at the cost of length. If a sentence is there to impress rather than to answer, it goes.
+- Default short. Two tight paragraphs beat four; one strong paragraph often beats two. Length is not thoroughness — the reviewer reads dozens of these.
+
 1. Draft from source material:
    - **Report context**: proof points from block B, STAR stories from block F.
    - **Prior Section G**: if a draft answer exists, use it as a base and refine.
