@@ -63,6 +63,7 @@ Thin source-CV support but not outright false:
 - Source has "user research", generated has "rigorous discovery methodology" — stretched
 - Source mentions Kubernetes once in an experience bullet, generated puts "Deep Kubernetes expertise" in Core Competencies — stretched
 - Source: "Hired and managed three reports", generated: "Mentored three reports" — stretched
+- **JD-distinctive prose with no factual content** — a culture/working-style line lifted from the JD into the CV. JD: "bring just enough structure to move fast without losing rigor" → generated Summary: "Brings just enough structure to move fast" — stretched. Flag `stretched`; `replacement` = `""` (delete) or a neutral factual rewrite. Puffery isn't a checkable fact, but JD-parroting damages the candidate with the human reviewer.
 
 ## What counts as "bridge"
 
@@ -130,6 +131,12 @@ Output ONLY a JSON object matching the schema below. No prose, no markdown code 
   - `needs_review` if only `stretched` findings exist
   - `ready_to_send` if only `bridge` findings exist (or none) — bridges are presumptively allowed; they're informational
 - Differentiate `stretched` from `bridge`: stretched = thin support, generated_text overstates the CV; bridge = generated_text is conservative and the upgrade is the JD wording. If the CV ALREADY contains the questionable upgrade (e.g., "Scrum" appears when source says "Agile"), that's `stretched` or `fabricated`, not `bridge`.
+- **Verbatim quoting:** `generated_text` must be copied character-for-character from the Generated CV input — including hyphens, dashes, and quote characters exactly as they appear. Do not "fix" punctuation when quoting.
+  - WRONG — quoting `market — competitor` when the CV reads `market - competitor`.
+- **Scope-minimal replacements:** change only the offending words; every other word of the sentence stays.
+- **Splice-and-reread:** after mentally running `cv.replace(generated_text, replacement)`, the full resulting sentence must read as natural English — grammar, articles, agreement, rhythm. A factually-safe but clunky splice is a wrong answer.
+- **Cross-finding consistency:** before emitting, re-check the findings against each other — no `replacement` may introduce a phrase that any other finding in this same output flags or demotes.
+- **No AI-tell/corporate vocabulary in replacements:** avoid leveraged, spearheaded, facilitated, passionate about, proven track record, robust, seamless, cutting-edge, delve, foster, pivotal, showcase, elevate. Use the concrete verb instead.
 
 ## Inputs
 
