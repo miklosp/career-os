@@ -10,10 +10,12 @@ launched from the dashboard `t` key.
 
 The provenance contract is CLAUDE.md → **CV Generation → Fact-Check**: a
 generator under a `[src: id]` closed-world contract, a deterministic validator,
-and an independent cross-family judge. Those three are the scripts below — this
-mode orchestrates them and the human decisions between them. Two rules carry the
-whole flow: **never auto-revise from reviewer output** (the user applies fixes,
-the reviewer only surfaces), and **regenerate at most once**.
+and two independent reviewers (ATS simulation + cross-family fact-check, one
+merged review JSON). Those are the scripts below — this mode orchestrates them
+and the human decisions between them. Two rules carry the whole flow: **never
+auto-revise from reviewer output** (the user applies fixes, the reviewer only
+surfaces), and **fixes are edits, not regenerations** — regenerate only on an
+explicit user request, at most once.
 
 ## Step 0 — Resolve & gate
 
@@ -113,14 +115,24 @@ Then work the simulation `deviations`:
   Uncertain; do you have a concrete number or artifact?" Dictated evidence →
   `notes.yml` + report Criteria update, **same rules as Step 2**.
 - **`lost_evidence`** (an `[evidenced]` criterion the ATS reads as *does not
-  meet*) — note it for the regeneration; don't hand-patch.
+  meet*) — the evidence exists in the ledger's cited source but the generated
+  CV dropped or buried it. Propose a direct edit that puts it back: strengthen
+  the relevant bullet with the cited source's specifics (closed-world — only
+  what the `[src:]` id actually says), get a yes, splice with Edit.
 
-## Step 6 — Regenerate once, automatically
+## Step 6 — Fold new evidence in by editing, not regenerating
 
-If Steps 2 or 5 **added notes or changed the Criteria ledger** (not mere CV text
-splices), re-run **Step 3 then Step 4 once**. Walk only the **new** findings —
-diff against the already-actioned ones by `generated_text`. **Never regenerate a
-second time**: if issues remain after this pass, surface them for a hand edit.
+Notes added in Steps 2 or 5 land in the CV as **direct edits** — tailoring is
+mostly editing and shuffling bullets, and a full regeneration re-rolls every
+other line, risking new leaks in text the user already reviewed. For each new
+`n#`: propose the minimal bullet edit (or Summary tweak) that claims exactly
+what the note supports, get a yes, splice with Edit. Plain-ASCII punctuation,
+same as Step 5.
+
+Regenerate (Step 3 → Step 4 again) **only if the user explicitly asks** — the
+escape hatch for when the ledger changed so much the CV's whole shape is wrong.
+Then walk only the **new** findings (diff against already-actioned ones by
+`generated_text`), and never regenerate a second time.
 
 ## Step 7 — PDF & close out
 
@@ -140,18 +152,27 @@ uv run --project . render-cv-pdf.py \
   `| {NUM} |` row in place — never add a row, never touch status or run
   merge-tracker (that is the user's job).
 
-## Step 8 — Handoff to apply
+## Step 8 — Apply now? (AskUserQuestion)
 
-Offer to open the application URL and continue with `/career-ops apply`, which
-owns the per-ATS form mechanics and the browser. Detect a cmux workspace with the
-**`cmux current-workspace` capability probe** (returns a workspace, not a socket
-error) — **not** an env var; if it's a cmux workspace, `apply` opens the URL in
-the cmux browser, non-headless, so the user watches. Otherwise `apply`'s
-agent-browser fallback applies. Either way, restate the Ethical Use stop: forms
-get filled, **nothing is submitted** without the user.
+Close the flow with one `AskUserQuestion`: "Apply right away?" with options
+**Apply now** and **Later**. Put the company, role, and score in the question
+context so the user decides from facts on screen.
+
+- **Apply now** → open the application URL and continue with
+  `/career-ops apply`, which owns the per-ATS form mechanics and the browser.
+  Detect a cmux workspace with the **`cmux current-workspace` capability
+  probe** (returns a workspace, not a socket error) — **not** an env var; in a
+  cmux workspace, `apply` opens the URL in the cmux browser, non-headless, so
+  the user watches. Otherwise `apply`'s agent-browser fallback applies. Either
+  way, restate the Ethical Use stop: forms get filled, **nothing is submitted**
+  without the user.
+- **Later** → stop cleanly: restate the CV/PDF paths and that the row shows
+  PDF ✅; applying later is `/career-ops apply {NUM}` or the dashboard `a` key.
 
 ## Cost & pacing
 
-Worst case is ~2 generation (Opus) + 2 review (GPT) calls — one regeneration, no
-more. Batch `AskUserQuestion` into groups of ≤4. Don't ask what a file already
-answers: read the report, the review JSON, and `notes.yml` before prompting.
+Typical run is 1 generation (Opus) + 2 parallel review calls (ATS simulation on
+`REVIEW_MODEL`, fact-check on `FACTCHECK_MODEL`); an explicit user-requested
+regeneration doubles that, once, worst case. Batch `AskUserQuestion` into groups
+of ≤4. Don't ask what a file already answers: read the report, the review JSON,
+and `notes.yml` before prompting.
