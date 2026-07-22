@@ -59,6 +59,17 @@ type PipelineApplyMsg struct {
 	App           model.CareerApplication
 }
 
+// PipelineTailorMsg is emitted when the user starts the interactive CV-tailoring
+// flow for the selected app (`g`). It shares the apply launch machinery: inside
+// cmux it spawns a new workspace (tab) running an interactive session primed
+// with `/career-ops tailor {NUM}`; outside cmux it degrades to opening the job
+// URL in the host browser. Distinct from PipelineGenerateCVMsg (`ctrl+g`), which
+// keeps the old zero-interaction batch generate → review chain.
+type PipelineTailorMsg struct {
+	CareerOpsPath string
+	App           model.CareerApplication
+}
+
 // PipelineLoadReportMsg requests lazy loading of a report summary.
 type PipelineLoadReportMsg struct {
 	CareerOpsPath string
@@ -757,6 +768,17 @@ func (m PipelineModel) handleKey(msg tea.KeyMsg) (PipelineModel, tea.Cmd) {
 		}
 
 	case "g":
+		// Interactive CV tailoring: launch a primed agent session the same way
+		// `a` launches apply. ctrl+g (below) keeps the old batch generate chain.
+		if app, ok := m.CurrentApp(); ok {
+			path := m.careerOpsPath
+			return m, func() tea.Msg {
+				return PipelineTailorMsg{CareerOpsPath: path, App: app}
+			}
+		}
+
+	case "ctrl+g":
+		// Batch generate: the zero-interaction generate → review → PDF chain.
 		if app, ok := m.CurrentApp(); ok {
 			path := m.careerOpsPath
 			return m, func() tea.Msg {
@@ -1469,7 +1491,8 @@ func (m PipelineModel) renderHelp() string {
 		hint("", "c", "hange"),
 		hint("", "d", "iscard"),
 		hint("", "p", "rune"),
-		hint("", "g", "enerate CV"),
+		hint("", "g", ": tailor CV"),
+		hint("", "^g", " batch"),
 		hint("", "f", "ind"),
 		hint("", "r", "efresh"),
 	}

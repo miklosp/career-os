@@ -25,9 +25,13 @@ type ViewerOpenURLMsg struct{}
 // ViewerDiscardMsg is emitted when the user asks to discard the current job.
 type ViewerDiscardMsg struct{}
 
-// ViewerGenerateCVMsg is emitted when the user asks to generate a CV for the
-// current job.
+// ViewerGenerateCVMsg is emitted when the user asks the batch CV generation
+// chain for the current job (ctrl+g).
 type ViewerGenerateCVMsg struct{}
+
+// ViewerTailorMsg is emitted when the user asks for the interactive tailor
+// session for the current job (g). Main routes it to PipelineTailorMsg.
+type ViewerTailorMsg struct{}
 
 // ViewerChangeStatusMsg is emitted when the user asks to change the status of
 // the current job. Main routes this back to the pipeline's status picker.
@@ -161,6 +165,9 @@ func (m ViewerModel) Update(msg tea.Msg) (ViewerModel, tea.Cmd) {
 			return m, func() tea.Msg { return ViewerDiscardMsg{} }
 
 		case "g":
+			return m, func() tea.Msg { return ViewerTailorMsg{} }
+
+		case "ctrl+g":
 			return m, func() tea.Msg { return ViewerGenerateCVMsg{} }
 		}
 
@@ -666,6 +673,7 @@ func (m ViewerModel) renderFooter() string {
 		keyStyle.Render("o")+descStyle.Render(" open URL  ")+
 			keyStyle.Render("c")+descStyle.Render(" change  ")+
 			keyStyle.Render("d")+descStyle.Render(" discard  ")+
-			keyStyle.Render("g")+descStyle.Render(" gen CV  ")+
+			keyStyle.Render("g")+descStyle.Render(" tailor  ")+
+			keyStyle.Render("^g")+descStyle.Render(" batch  ")+
 			keyStyle.Render("Esc")+descStyle.Render(" back"))
 }

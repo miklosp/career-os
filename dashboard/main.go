@@ -197,6 +197,15 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case screens.ViewerTailorMsg:
+		if app, ok := m.pipeline.CurrentApp(); ok {
+			path := m.careerOpsPath
+			return m, func() tea.Msg {
+				return screens.PipelineTailorMsg{CareerOpsPath: path, App: app}
+			}
+		}
+		return m, nil
+
 	case screens.PipelineOpenProgressMsg:
 		m.progress = screens.NewProgressModel(
 			theme.NewTheme("catppuccin-mocha"),
@@ -470,102 +479,27 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case screens.PipelineApplyMsg:
 		app := msg.App
 		careerOpsPath := msg.CareerOpsPath
-		return m, func() tea.Msg {
-			// Resolve the launcher first: the primed prompt is shaped
-			// per agent. Claude Code resolves the repo-local
-			// `.claude/skills/career-ops` skill, so it gets the
-			// `/career-ops apply …` slash form. Every other agent has no
-			// such skill, so it gets a self-contained instruction that
-			// points it straight at modes/apply.md + CLAUDE.md. applyPrompt
-			// decides from the launcher's leading token.
-			launcher := applyLauncher(careerOpsPath)
-			prompt := applyPrompt(launcher, careerOpsPath, app)
+		// Resolve the launcher first: the primed prompt is shaped per agent.
+		// Claude Code resolves the repo-local `.claude/skills/career-ops` skill,
+		// so it gets the `/career-ops apply …` slash form. Every other agent has
+		// no such skill, so it gets a self-contained instruction that points it
+		// straight at modes/apply.md + CLAUDE.md. applyPrompt decides from the
+		// launcher's leading token.
+		launcher := applyLauncher(careerOpsPath)
+		prompt := applyPrompt(launcher, careerOpsPath, app)
+		return m, spawnAgentWorkspace(careerOpsPath, "Apply · "+app.Company, launcher, prompt, app)
 
-			// Inside a reachable cmux: spawn a new workspace (tab) running
-			// an interactive, primed agent session in the repo.
-			//
-			// The launcher token comes from applyLauncher() (env →
-			// .env CAREER_OPS_APPLY_AGENT → "claude") and is run through an interactive
-			// shell (`$SHELL -ic`) so ~/.zshrc is sourced and the user's
-			// `claude()` function (→ `safe claude
-			// --dangerously-skip-permissions …` Agent Safehouse wrapper)
-			// applies. Shell functions/aliases never survive a
-			// non-interactive `sh -c`, so the interactive shell wrap is
-			// load-bearing.
-			//
-			// Sandbox bridge: Safehouse deny-by-default blocks the cmux
-			// Unix socket (~/Library/Application Support/cmux/, denied
-			// path) and strips CMUX_* env, so a sandboxed apply session
-			// can't drive cmux. This dashboard runs unsandboxed inside
-			// cmux, so its OWN env carries the full CMUX_* set + the
-			// socket path — pass them down via Safehouse's env-equivalent
-			// knobs (SAFEHOUSE_ENV_PASS / SAFEHOUSE_ADD_DIRS). The user's
-			// `safe` wrapper honours them; a plain unsandboxed launcher
-			// ignores them. No hardcoded paths, future-proof to new
-			// CMUX_* vars.
-			if cmuxBin, ok := cmuxReachable(); ok {
-				title := "Apply · " + app.Company
-				shell := os.Getenv("SHELL")
-				if shell == "" {
-					shell = "/bin/zsh"
-				}
-
-				// Collect every CMUX_* name from our own (unsandboxed)
-				// environment so the wrapped session can re-create the
-				// caller context cmux needs for socket + workspace target.
-				var cmuxNames []string
-				for _, kv := range os.Environ() {
-					if strings.HasPrefix(kv, "CMUX_") {
-						if i := strings.IndexByte(kv, '='); i > 0 {
-							cmuxNames = append(cmuxNames, kv[:i])
-						}
-					}
-				}
-				sockDir := ""
-				if sp := os.Getenv("CMUX_SOCKET_PATH"); sp != "" {
-					sockDir = filepath.Dir(sp)
-				} else if home, err := os.UserHomeDir(); err == nil {
-					sockDir = filepath.Join(home, "Library", "Application Support", "cmux")
-				}
-				var sbPrefix string
-				if len(cmuxNames) > 0 {
-					sbPrefix += "SAFEHOUSE_ENV_PASS=" + shellQuote(strings.Join(cmuxNames, ",")) + " "
-				}
-				if sockDir != "" {
-					sbPrefix += "SAFEHOUSE_ADD_DIRS=" + shellQuote(sockDir) + " "
-				}
-
-				inner := launcher + " " + shellQuote(prompt)
-				launch := sbPrefix + shell + " -ic " + shellQuote(inner)
-				c := exec.Command(cmuxBin, "new-workspace",
-					"--name", title,
-					"--cwd", careerOpsPath,
-					"--command", launch,
-					"--focus", "true")
-				if err := c.Run(); err == nil {
-					return nil
-				}
-				// fall through to host-browser degrade on failure
-			}
-
-			// Not in cmux (or spawn failed): degrade to opening the job
-			// URL in the host browser — the user runs /career-ops apply
-			// manually from a terminal in the repo.
-			if app.JobURL == "" {
-				return nil
-			}
-			var cmd *exec.Cmd
-			switch runtime.GOOS {
-			case "darwin":
-				cmd = exec.Command("open", app.JobURL)
-			case "windows":
-				cmd = exec.Command("cmd", "/c", "start", "", app.JobURL)
-			default:
-				cmd = exec.Command("xdg-open", app.JobURL)
-			}
-			_ = cmd.Run()
-			return nil
-		}
+	case screens.PipelineTailorMsg:
+		app := msg.App
+		careerOpsPath := msg.CareerOpsPath
+		// Same launch machinery as apply — the shared agent launcher
+		// (applyLauncher: env → .env CAREER_OPS_APPLY_AGENT → "claude") plus a
+		// prompt shaped per agent. Claude Code gets the `/career-ops tailor {NUM}`
+		// slash form; every other agent gets a self-contained instruction that
+		// points it straight at modes/tailor.md + CLAUDE.md.
+		launcher := applyLauncher(careerOpsPath)
+		prompt := tailorPrompt(launcher, careerOpsPath, app)
+		return m, spawnAgentWorkspace(careerOpsPath, "Tailor · "+app.Company, launcher, prompt, app)
 
 	default:
 		if m.state == viewReport {
@@ -781,6 +715,57 @@ func applyPrompt(launcher, careerOpsPath string, app model.CareerApplication) st
 	return b.String()
 }
 
+// tailorPrompt builds the initial message for the interactive CV-tailoring
+// session. It mirrors applyPrompt's launcher-dependent shaping:
+//
+//   - Claude Code (launcher leads with `claude`) → the native
+//     `/career-ops tailor {NUM}` slash form; the skill router loads modes/tailor.md.
+//   - Any other agent → a self-contained instruction that points it straight at
+//     modes/tailor.md + CLAUDE.md.
+//
+// The NUM is derived the way the rest of the codebase does — app.ReportNumber,
+// falling back to the leading NUM of the report path. When no NUM resolves, the
+// prompt falls back to naming the company + role so tailor.md's Step 0 can still
+// resolve the argument.
+func tailorPrompt(launcher, careerOpsPath string, app model.CareerApplication) string {
+	agent := ""
+	if fields := strings.Fields(launcher); len(fields) > 0 {
+		agent = filepath.Base(fields[0])
+	}
+
+	num := app.ReportNumber
+	if num == "" {
+		num = reportNum(app.ReportPath)
+	}
+
+	var b strings.Builder
+	if agent == "claude" {
+		// Slash command must lead; tailor.md resolves the NUM and locates the
+		// report/JD/CV itself.
+		if num != "" {
+			fmt.Fprintf(&b, "/career-ops tailor %s — application #%d: %s — %s",
+				num, app.Number, app.Company, app.Role)
+		} else {
+			fmt.Fprintf(&b, "/career-ops tailor — application #%d: %s — %s",
+				app.Number, app.Company, app.Role)
+		}
+		return b.String()
+	}
+
+	if num != "" {
+		fmt.Fprintf(&b, "Read ./modes/tailor.md and ./CLAUDE.md, then run the "+
+			"career-ops interactive CV-tailoring flow for application #%d (NUM %s): %s — %s.",
+			app.Number, num, app.Company, app.Role)
+	} else {
+		fmt.Fprintf(&b, "Read ./modes/tailor.md and ./CLAUDE.md, then run the "+
+			"career-ops interactive CV-tailoring flow for application #%d: %s — %s.",
+			app.Number, app.Company, app.Role)
+	}
+	b.WriteString(" Follow modes/tailor.md exactly — criteria, elicit the missing " +
+		"evidence from the user, generate, walk the review, then render the PDF.")
+	return b.String()
+}
+
 // resolveCustomizedCV returns the repo-relative path of the customized CV PDF
 // for a tracker NUM (output/customized-cvs/{NUM}-*-cv.pdf), or "" when none has
 // been generated yet. Passing the exact path spares the apply agent a glob.
@@ -798,6 +783,94 @@ func resolveCustomizedCV(careerOpsPath, num string) string {
 		return ""
 	}
 	return rel
+}
+
+// spawnAgentWorkspace launches an interactive, primed agent session for `app`.
+// Inside a reachable cmux it opens a new workspace (tab) titled `title` running
+// `launcher <prompt>` in the repo; outside cmux — or on spawn failure — it
+// degrades to opening the app's job URL in the host browser. Shared by the
+// apply (`a`) and tailor (`g`) launch paths, which differ only in workspace
+// title and primed prompt.
+//
+// The launcher token comes from applyLauncher() (env → .env
+// CAREER_OPS_APPLY_AGENT → "claude") and is run through an interactive shell
+// (`$SHELL -ic`) so ~/.zshrc is sourced and the user's `claude()` function (→
+// `safe claude --dangerously-skip-permissions …` Agent Safehouse wrapper)
+// applies. Shell functions/aliases never survive a non-interactive `sh -c`, so
+// the interactive shell wrap is load-bearing.
+//
+// Sandbox bridge: Safehouse deny-by-default blocks the cmux Unix socket
+// (~/Library/Application Support/cmux/, denied path) and strips CMUX_* env, so a
+// sandboxed session can't drive cmux. This dashboard runs unsandboxed inside
+// cmux, so its OWN env carries the full CMUX_* set + the socket path — pass them
+// down via Safehouse's env-equivalent knobs (SAFEHOUSE_ENV_PASS /
+// SAFEHOUSE_ADD_DIRS). The user's `safe` wrapper honours them; a plain
+// unsandboxed launcher ignores them. No hardcoded paths, future-proof to new
+// CMUX_* vars.
+func spawnAgentWorkspace(careerOpsPath, title, launcher, prompt string, app model.CareerApplication) tea.Cmd {
+	return func() tea.Msg {
+		if cmuxBin, ok := cmuxReachable(); ok {
+			shell := os.Getenv("SHELL")
+			if shell == "" {
+				shell = "/bin/zsh"
+			}
+
+			// Collect every CMUX_* name from our own (unsandboxed) environment
+			// so the wrapped session can re-create the caller context cmux needs
+			// for socket + workspace target.
+			var cmuxNames []string
+			for _, kv := range os.Environ() {
+				if strings.HasPrefix(kv, "CMUX_") {
+					if i := strings.IndexByte(kv, '='); i > 0 {
+						cmuxNames = append(cmuxNames, kv[:i])
+					}
+				}
+			}
+			sockDir := ""
+			if sp := os.Getenv("CMUX_SOCKET_PATH"); sp != "" {
+				sockDir = filepath.Dir(sp)
+			} else if home, err := os.UserHomeDir(); err == nil {
+				sockDir = filepath.Join(home, "Library", "Application Support", "cmux")
+			}
+			var sbPrefix string
+			if len(cmuxNames) > 0 {
+				sbPrefix += "SAFEHOUSE_ENV_PASS=" + shellQuote(strings.Join(cmuxNames, ",")) + " "
+			}
+			if sockDir != "" {
+				sbPrefix += "SAFEHOUSE_ADD_DIRS=" + shellQuote(sockDir) + " "
+			}
+
+			inner := launcher + " " + shellQuote(prompt)
+			launch := sbPrefix + shell + " -ic " + shellQuote(inner)
+			c := exec.Command(cmuxBin, "new-workspace",
+				"--name", title,
+				"--cwd", careerOpsPath,
+				"--command", launch,
+				"--focus", "true")
+			if err := c.Run(); err == nil {
+				return nil
+			}
+			// fall through to host-browser degrade on failure
+		}
+
+		// Not in cmux (or spawn failed): degrade to opening the job URL in the
+		// host browser — the user runs the flow manually from a terminal in the
+		// repo.
+		if app.JobURL == "" {
+			return nil
+		}
+		var cmd *exec.Cmd
+		switch runtime.GOOS {
+		case "darwin":
+			cmd = exec.Command("open", app.JobURL)
+		case "windows":
+			cmd = exec.Command("cmd", "/c", "start", "", app.JobURL)
+		default:
+			cmd = exec.Command("xdg-open", app.JobURL)
+		}
+		_ = cmd.Run()
+		return nil
+	}
 }
 
 // cmuxReachable reports whether this process can actually drive cmux, and
