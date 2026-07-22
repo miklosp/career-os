@@ -52,4 +52,4 @@ Em-dashes, en-dashes, smart quotes, ellipses, zero-width chars and nbsp break Wo
 
 ## 6. Self-check before output
 
-Before any candidate-facing text leaves: re-read once against §2–§4, and confirm the personal signature from `config/profile.md` → Voice & Branding is present. This pass is mandatory for everything a reviewer reads; exempt only short factual fields (name, phone, URL, Yes/No, dropdowns).
+Before any candidate-facing text leaves: re-read once against §2–§4, and confirm the personal signature from `config/profile.md` → Voice & Branding is present. Where the text answers a question (form field, cover letter, outbound message), also confirm **selection**: every sentence answers the literal question, and the evidence count stays at the minimum that proves the point — two proofs is the default ceiling unless the question asks for more. This pass is mandatory for everything a reviewer reads; exempt only short factual fields (name, phone, URL, Yes/No, dropdowns).

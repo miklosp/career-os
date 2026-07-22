@@ -27,8 +27,8 @@ the signature) and `config/story-bank.md`.
 
 Every concrete claim — a metric, a named system, an outcome — must trace to one of:
 
-- the evaluation report's **Block B** (proof points) or **Block F** (STAR
-  stories), when a report exists;
+- the evaluation report's **Block A** matches or `[evidenced]` Criteria-ledger
+  items (with their `[src: id]` evidence), when a report exists;
 - a `config/cv.json` bullet or a `config/story-bank.md` story;
 - `config/profile.md` narrative.
 
@@ -40,8 +40,10 @@ above, do not claim it — reframe around an adjacent strength.
 ## Step 1 — Load context
 
 - **NUM path:** read the report. Header → company, role, score, archetype.
-  Block B → proof points. Block F → STAR stories. If the report already has a
-  **Section G** (prior apply answers), mine it for phrasing that landed.
+  Block A → cited matches. Criteria ledger (bottom of the report) → the
+  employer's screening needs as `[evidenced]`/`[gap]` bullets — the letter's
+  spine. If the report already has a **Section G** (prior apply answers),
+  mine it for phrasing that landed.
 - **Cold path:** read the pasted JD. Pull the company, role, and the three or
   four needs it leads with.
 - Read `config/cv.json` for the spine of experience and `config/story-bank.md`
@@ -60,9 +62,12 @@ One page. Structure:
 1. **Greeting** — `Dear Hiring Team,` unless a named hiring manager is known.
 2. **Opening** — a concrete hook: why *this* company and role, referencing
    something specific and real from the JD. No generic "I am excited to apply."
-3. **Two body paragraphs** — map the JD's top needs to proof points and one
-   STAR story. Lead each on outcome and relevance; keep method only where it
-   backs the impact, and drop the rest. Numbers and named systems over adjectives.
+3. **Two body paragraphs** — pick the two most important `[evidenced]`
+   Criteria-ledger items (cold path: the JD's two lead needs) and prove each
+   with its cited evidence. One proof or story per paragraph, two headline
+   proofs total — the rest of the ledger stays in reserve for the interview.
+   Lead each on outcome and relevance; keep method only where it backs the
+   impact, and drop the rest. Numbers and named systems over adjectives.
 4. **Close** — confident and forward-looking; an "I'm choosing you" register,
    not a plea. Point at the conversation, not at a closing zinger.
 
@@ -70,7 +75,8 @@ One page. Structure:
 
 Rewrite the draft in the candidate's signature per `config/profile.md` →
 **Voice & Branding** (first person, proof-before-claim, builder's register,
-confident close). Keep every proof point.
+confident close). Keep the two selected proofs intact; cut anything else the
+draft picked up along the way.
 
 ## Step 4 — Scrub pass
 

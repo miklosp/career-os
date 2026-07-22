@@ -1,7 +1,9 @@
 # Mode: _eval — Lean evaluation (A/B/C/D scored)
 
 Called after `modes/_location-gate.md` returns ALLOW. Reads
-`data/jds/{NUM}-*.md`, the **id-annotated CV**, and `config/profile.md`.
+`data/jds/{NUM}-*.md`, the **id-annotated CV**, `config/profile.md`,
+`config/story-bank.md` (source of citable `S0xx` ids), and
+`config/notes.yml` (confirmed `n#` notes from prior tailor sessions).
 
 Get the id-annotated CV with `node lib/cv-json-to-md.mjs --annotate-ids
 --stdout` — it is `config/cv.json` rendered as prose with each bullet's
@@ -27,7 +29,8 @@ feel — header label order and bullet density.
 ## Step 0 — Archetype detection
 
 Classify into one or two archetypes from `config/profile.md` (Target Roles
-& Archetypes). This controls framing in Block B and proof-point selection.
+& Archetypes). This controls framing in Block B and which CV matches lead
+Block A.
 
 ## Report shape
 
@@ -102,7 +105,7 @@ Compute the weighted global score silently:
 
 | Block | What it measures | Weight |
 |-------|-----------------|--------|
-| A: CV Match | Skills, experience, proof-points alignment | 0.35 |
+| A: CV Match | Skills, experience, evidence alignment | 0.35 |
 | B: North Star | Fit with the user's target archetypes (from `config/profile.md`) | 0.30 |
 | C: Cultural Signals | Remote policy, domain fit, JD tone (JD text only) | 0.20 |
 | D: Red Flags | Blockers, warnings, negative adjustments (JD text only) | 0.15 |
@@ -126,18 +129,27 @@ call.` / `Skip — IC scope misalignment.` Do not hedge.
 ### Criteria
 
 Mirrors how Ashby/Greenhouse auto-generate screening criteria from the JD;
-downstream the CV generator proves each evidenced criterion and the reviewer
-simulates the ATS evaluation against this list.
+downstream the CV generator proves each evidenced criterion, the reviewer
+simulates the ATS evaluation against this list, and `apply`/`cover-letter`
+pick their evidence from the top of it.
 
-A distillation of Block A — matches become `[evidenced]` criteria, gaps become
-`[gap]` criteria. Rules:
+Derive the criteria from the **JD's requirements** — not from Block A. Then
+mark each one by consulting Block A, the id-annotated CV, the story bank, and
+confirmed notes: provable criteria become `[evidenced]`, the rest `[gap]`. A
+JD requirement is never dropped for lacking a match — it becomes a `[gap]`.
+Rules:
 
 - 5–15 `- ` bullets, each opening with a status tag: `[evidenced]` or `[gap]`.
+- **Order by JD priority**, regardless of tag: lead/must-have requirements
+  first, nice-to-haves last. Downstream reads top-of-ledger as the employer's
+  most important needs.
 - Criterion text is a JD requirement phrased Ashby-style — verifiable from a
   résumé (skill, years, scope, domain). NOT culture traits, company product
   names, or logistics/comp terms.
 - `[evidenced]` items end with ` — [src: id, id]` citing the Block-A Match /
   CV / story-bank / note ids that prove them. `[gap]` items carry no `[src:]`.
+- The `### Criteria` heading and the `- [tag] … — [src: …]` bullet shape are
+  machine-parsed (`lib/cv-fact-check.mjs`); keep both verbatim.
 
 ```markdown
 ### Criteria

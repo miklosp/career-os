@@ -115,9 +115,11 @@ Open the **Form URL** from the dispatch. Pick the browser path once (see Browser
 Read the **Report** at the exact path from the dispatch. That is the only file to open — don't grep for siblings. Pull what the answers will draw on:
 
 - **Header** — archetype and score, for the output banner.
-- **Block B** — proof points to map onto the JD.
-- **Block F** — STAR stories for "tell us about a project"-style questions.
+- **Block A: CV Match** — the cited matches (`[src: id]`) mapping JD requirements to CV lines and stories.
+- **Criteria ledger** (bottom of the report) — the employer's screening needs as `[evidenced]`/`[gap]` bullets. This is the ranked needs list every answer must prove against.
 - **Section G**, if the report already has one — answers from a prior apply run against this company. They are battle-tested; use them as the base and refine, don't start from scratch.
+
+When a question calls for a full story ("tell us about a project"), resolve the cited `S0xx` ids in `config/story-bank.md` — but only the ids the selected criteria cite, not the whole bank.
 
 ## Step 3 — Analyze form questions
 
@@ -144,13 +146,13 @@ Classify each question:
 - A credibility signal can ride along, but sparingly — at most one, and never at the cost of length. If a sentence is there to impress rather than to answer, it goes.
 - Default short. Two tight paragraphs beat four; one strong paragraph often beats two. Length is not thoroughness — the reviewer reads dozens of these.
 
-1. Draft from source material:
-   - **Report context**: proof points from block B, STAR stories from block F.
+1. **Select evidence, then draft:**
+   - **Selection first**: name which 1–2 Criteria-ledger items (or Block-A matches) this question probes. The answer draws on the evidence behind those — at most two proofs/stories — unless the question explicitly asks for more. Everything else stays out, however strong it is.
+   - **Report context**: Block-A matches and `[evidenced]` criteria with their `[src: id]` evidence; resolve `S0xx` ids in `config/story-bank.md` for story questions.
    - **Prior Section G**: if a draft answer exists, use it as a base and refine.
    - **"I'm choosing you" tone**: same framework as auto-pipeline.
    - **Specificity**: reference something concrete from the JD visible on screen.
-   - **Proof point**: include in "Additional info" if there is a field for it.
-2. **Voice pass** — rewrite the draft in the candidate's signature per `config/profile.md` → **Voice & Branding** (first person, proof-before-claim, builder's register, confident close). Keep every proof point.
+2. **Voice pass** — rewrite the draft in the candidate's signature per `config/profile.md` → **Voice & Branding** (first person, proof-before-claim, builder's register, confident close). Keep the selected evidence intact; cut anything that doesn't answer the literal question, and never re-add evidence the selection step left out.
 3. **Scrub pass** — enforce `modes/_writing.md` §2–§4 on the result: kill corporate-speak and AI-tell vocabulary, strip AI-writing patterns (em-dash/rule-of-three/negative-parallelism/vague-attribution/filler), fix passive voice, vary structure. Then the §6 self-check.
 4. Only after both passes is the answer ready — proceed to Step 5 to fill it (or present it for copy-paste).
 
