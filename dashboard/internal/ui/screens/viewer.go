@@ -25,12 +25,8 @@ type ViewerOpenURLMsg struct{}
 // ViewerDiscardMsg is emitted when the user asks to discard the current job.
 type ViewerDiscardMsg struct{}
 
-// ViewerGenerateCVMsg is emitted when the user asks the batch CV generation
-// chain for the current job (ctrl+g).
-type ViewerGenerateCVMsg struct{}
-
 // ViewerTailorMsg is emitted when the user asks for the interactive tailor
-// session for the current job (g). Main routes it to PipelineTailorMsg.
+// session for the current job (t). Main routes it to PipelineTailorMsg.
 type ViewerTailorMsg struct{}
 
 // ViewerChangeStatusMsg is emitted when the user asks to change the status of
@@ -164,11 +160,8 @@ func (m ViewerModel) Update(msg tea.Msg) (ViewerModel, tea.Cmd) {
 		case "d":
 			return m, func() tea.Msg { return ViewerDiscardMsg{} }
 
-		case "g":
+		case "t":
 			return m, func() tea.Msg { return ViewerTailorMsg{} }
-
-		case "ctrl+g":
-			return m, func() tea.Msg { return ViewerGenerateCVMsg{} }
 		}
 
 	case tea.WindowSizeMsg:
@@ -671,9 +664,8 @@ func (m ViewerModel) renderFooter() string {
 
 	return separator + "\n" + rowStyle.Render(
 		keyStyle.Render("o")+descStyle.Render(" open URL  ")+
+			keyStyle.Render("t")+descStyle.Render(" tailor  ")+
 			keyStyle.Render("c")+descStyle.Render(" change  ")+
 			keyStyle.Render("d")+descStyle.Render(" discard  ")+
-			keyStyle.Render("g")+descStyle.Render(" tailor  ")+
-			keyStyle.Render("^g")+descStyle.Render(" batch  ")+
 			keyStyle.Render("Esc")+descStyle.Render(" back"))
 }

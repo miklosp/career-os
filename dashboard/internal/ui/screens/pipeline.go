@@ -60,11 +60,10 @@ type PipelineApplyMsg struct {
 }
 
 // PipelineTailorMsg is emitted when the user starts the interactive CV-tailoring
-// flow for the selected app (`g`). It shares the apply launch machinery: inside
+// flow for the selected app (`t`). It shares the apply launch machinery: inside
 // cmux it spawns a new workspace (tab) running an interactive session primed
 // with `/career-ops tailor {NUM}`; outside cmux it degrades to opening the job
-// URL in the host browser. Distinct from PipelineGenerateCVMsg (`ctrl+g`), which
-// keeps the old zero-interaction batch generate → review chain.
+// URL in the host browser.
 type PipelineTailorMsg struct {
 	CareerOpsPath string
 	App           model.CareerApplication
@@ -95,42 +94,10 @@ type PipelineRefreshMsg struct{}
 // PipelineOpenProgressMsg is emitted when the progress screen should open.
 type PipelineOpenProgressMsg struct{}
 
-// PipelineGenerateCVMsg is emitted when the user requests CV generation for the selected app.
-type PipelineGenerateCVMsg struct {
-	CareerOpsPath string
-	App           model.CareerApplication
-}
-
 // PipelineMergeMsg is emitted when the user runs `node merge-tracker.mjs`
 // to fold pending data/tracker-additions/*.tsv into applications.md.
 type PipelineMergeMsg struct {
 	CareerOpsPath string
-}
-
-// CVGenStartedMsg is emitted when background CV generation has started for an app.
-type CVGenStartedMsg struct{ AppKey string }
-
-// CVGenDoneMsg is emitted when background CV generation completes (Err nil = success).
-// CVPath is the absolute path to the generated markdown, used by main to
-// auto-chain the review phase.
-type CVGenDoneMsg struct {
-	AppKey string
-	CVPath string
-	Err    error
-}
-
-// ReviewStartedMsg is emitted when the auto-chained review call (Gemini via
-// Bifrost) begins for an app. Row status transitions from "generating" to
-// "reviewing".
-type ReviewStartedMsg struct{ AppKey string }
-
-// ReviewDoneMsg is emitted when the non-interactive review phase completes.
-// If Err is nil, the review JSON has been written to disk and the row
-// transitions to "review-pending" — awaiting the user's interactive
-// walkthrough via `F` or by pressing Enter on the row.
-type ReviewDoneMsg struct {
-	AppKey string
-	Err    error
 }
 
 // PipelineFactCheckMsg asks main to open the split-view fact-check screen
@@ -251,7 +218,7 @@ type PipelineModel struct {
 	theme           theme.Theme
 	careerOpsPath   string
 	reportCache     map[string]reportSummary
-	cvGenStatus     map[string]string // appKey → "started"|"done"|"error"
+	cvGenStatus     map[string]string // appKey → "review-pending"|"rendering"|"done"|"error"
 	// Status picker sub-state
 	statusPicker bool
 	statusCursor int
@@ -352,15 +319,13 @@ func (m *PipelineModel) CopyReportCache(other *PipelineModel) {
 }
 
 // RefreshFromDisk reconciles cvGenStatus with on-disk artifacts. Rows
-// currently in an in-flight state (generating/reviewing/rendering) are
-// skipped so we don't clobber their status mid-run. `error` rows ARE
-// overwritten so a transient Bifrost hiccup can be recovered from by
-// pressing `r` after a manual retry of the failed step.
+// currently in an in-flight state (rendering) are skipped so we don't
+// clobber their status mid-run. `error` rows ARE overwritten so a transient
+// render hiccup can be recovered from by pressing `r` after a manual retry
+// of the failed step.
 func (m *PipelineModel) RefreshFromDisk(reviewsByNum, cvsByNum map[string]bool) {
 	inFlight := map[string]bool{
-		"generating": true,
-		"reviewing":  true,
-		"rendering":  true,
+		"rendering": true,
 	}
 	for _, app := range m.apps {
 		num := app.ReportNumber
@@ -554,36 +519,6 @@ func (m PipelineModel) Update(msg tea.Msg) (PipelineModel, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		return m, nil
-	case CVGenStartedMsg:
-		m.cvGenStatus[msg.AppKey] = "generating"
-		return m, nil
-	case CVGenDoneMsg:
-		if msg.Err != nil {
-			m.cvGenStatus[msg.AppKey] = "error"
-		} else {
-			// Don't flip to "done" here — main will auto-chain the review
-			// phase immediately, which will set the status to "reviewing".
-			// If no auto-chain happens (edge case), the row stays in
-			// "generating" until next refresh; fine for now.
-			m.cvGenStatus[msg.AppKey] = "done"
-		}
-		return m, nil
-	case ReviewStartedMsg:
-		m.cvGenStatus[msg.AppKey] = "reviewing"
-		return m, nil
-	case ReviewDoneMsg:
-		if msg.Err != nil {
-			// Review failed (Gemini unreachable, bad JSON, etc.). Leave the
-			// CV without a PDF and surface error state — user can press F to
-			// retry review manually.
-			m.cvGenStatus[msg.AppKey] = "error"
-		} else {
-			// Main inspects the JSON file on disk to decide between
-			// auto-render and review-pending; status here is set by the
-			// dedicated messages it emits next.
-			m.cvGenStatus[msg.AppKey] = "review-pending"
-		}
-		return m, nil
 	case RenderPDFRequestedMsg:
 		m.cvGenStatus[msg.AppKey] = "rendering"
 		return m, nil
@@ -767,22 +702,13 @@ func (m PipelineModel) handleKey(msg tea.KeyMsg) (PipelineModel, tea.Cmd) {
 			m.pruneThreshold = defaultPruneThreshold
 		}
 
-	case "g":
+	case "t":
 		// Interactive CV tailoring: launch a primed agent session the same way
-		// `a` launches apply. ctrl+g (below) keeps the old batch generate chain.
+		// `a` launches apply.
 		if app, ok := m.CurrentApp(); ok {
 			path := m.careerOpsPath
 			return m, func() tea.Msg {
 				return PipelineTailorMsg{CareerOpsPath: path, App: app}
-			}
-		}
-
-	case "ctrl+g":
-		// Batch generate: the zero-interaction generate → review → PDF chain.
-		if app, ok := m.CurrentApp(); ok {
-			path := m.careerOpsPath
-			return m, func() tea.Msg {
-				return PipelineGenerateCVMsg{CareerOpsPath: path, App: app}
 			}
 		}
 
@@ -1379,10 +1305,6 @@ func (m PipelineModel) renderAppLine(app model.CareerApplication, selected bool)
 	cvBase := withBg(lipgloss.NewStyle().Width(cvW))
 	cvText := cvBase.Render("")
 	switch m.cvGenStatus[appKey(app)] {
-	case "generating":
-		cvText = withBg(lipgloss.NewStyle().Foreground(m.theme.Yellow).Width(cvW)).Render("Gen…")
-	case "reviewing":
-		cvText = withBg(lipgloss.NewStyle().Foreground(m.theme.Yellow).Width(cvW)).Render("Rev…")
 	case "review-pending":
 		cvText = withBg(lipgloss.NewStyle().Foreground(m.theme.Blue).Width(cvW)).Render("Review")
 	case "rendering":
@@ -1487,12 +1409,11 @@ func (m PipelineModel) renderHelp() string {
 
 	hintParts := []string{
 		hint("", "o", "pen"),
+		hint("", "t", "ailor CV"),
 		hint("", "a", "pply"),
 		hint("", "c", "hange"),
 		hint("", "d", "iscard"),
 		hint("", "p", "rune"),
-		hint("", "g", ": tailor CV"),
-		hint("", "^g", " batch"),
 		hint("", "f", "ind"),
 		hint("", "r", "efresh"),
 	}

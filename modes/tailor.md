@@ -6,7 +6,7 @@ missing evidence from the user → generate → walk the review → PDF → hand
 the step `apply` points you to when a role has no reviewed CV yet. This is the
 **user-triggered** CV-personalization path (CLAUDE.md: CV personalization is
 never part of the background pipeline). Often runs inside a cmux workspace
-launched from the dashboard `a` key.
+launched from the dashboard `t` key.
 
 The provenance contract is CLAUDE.md → **CV Generation → Fact-Check**: a
 generator under a `[src: id]` closed-world contract, a deterministic validator,

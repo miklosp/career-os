@@ -188,15 +188,6 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.openCurrentReport()
 		return m, nil
 
-	case screens.ViewerGenerateCVMsg:
-		if app, ok := m.pipeline.CurrentApp(); ok {
-			path := m.careerOpsPath
-			return m, func() tea.Msg {
-				return screens.PipelineGenerateCVMsg{CareerOpsPath: path, App: app}
-			}
-		}
-		return m, nil
-
 	case screens.ViewerTailorMsg:
 		if app, ok := m.pipeline.CurrentApp(); ok {
 			path := m.careerOpsPath
@@ -241,105 +232,6 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.state = viewPipeline
 		return m, nil
 
-	case screens.PipelineGenerateCVMsg:
-		key := msg.App.ReportPath
-		if key == "" {
-			key = msg.App.Company + "/" + msg.App.Role
-		}
-		num := reportNum(msg.App.ReportPath)
-		jdFile := ""
-		if num != "" {
-			jdFile = findJDFileByNum(msg.CareerOpsPath, num)
-		}
-		if jdFile == "" {
-			// No JD file — ignore silently (status stays empty, user sees nothing happened)
-			return m, nil
-		}
-		// Derive the CV output path so the auto-chained review phase knows
-		// where to find the markdown. Matches lib/generate-cv-llm.mjs convention:
-		// output/customized-cvs/{NUM}-{slug}-cv.md where slug comes from the JD filename.
-		jdBase := strings.TrimSuffix(filepath.Base(jdFile), ".md")
-		cvPath := filepath.Join(msg.CareerOpsPath, "output", "customized-cvs", jdBase+"-cv.md")
-		careerOpsPath := msg.CareerOpsPath
-		startedCmd := func() tea.Msg { return screens.CVGenStartedMsg{AppKey: key} }
-		bgCmd := func() tea.Msg {
-			// Script derives NUM and slug from the JD filename. PDF is
-			// deferred to the finalize step (after the user walks the review),
-			// so generate markdown only here.
-			cmd := exec.Command("node", "lib/generate-cv-llm.mjs",
-				"--jd", jdFile, "--format", "a4", "--no-pdf")
-			cmd.Dir = careerOpsPath
-			err := runSpawn(cmd, careerOpsPath, "cv-generate")
-			return screens.CVGenDoneMsg{AppKey: key, CVPath: cvPath, Err: err}
-		}
-		return m, tea.Batch(startedCmd, bgCmd)
-
-	case screens.CVGenDoneMsg:
-		// Let the pipeline update its status map first.
-		pm, pcmd := m.pipeline.Update(msg)
-		m.pipeline = pm
-		// On success, auto-chain the non-interactive review phase. The user
-		// will see status go generating → reviewing → review-pending as
-		// Bifrost calls complete.
-		if msg.Err != nil || msg.CVPath == "" {
-			return m, pcmd
-		}
-		if _, statErr := os.Stat(msg.CVPath); statErr != nil {
-			return m, pcmd
-		}
-		careerOpsPath := m.careerOpsPath
-		cvPath := msg.CVPath
-		appKey := msg.AppKey
-		reviewStartedCmd := func() tea.Msg {
-			return screens.ReviewStartedMsg{AppKey: appKey}
-		}
-		reviewCmd := func() tea.Msg {
-			cmd := exec.Command("node", "lib/cv-fact-check.mjs",
-				"--review-only", cvPath)
-			cmd.Dir = careerOpsPath
-			err := runSpawn(cmd, careerOpsPath, "cv-review")
-			return screens.ReviewDoneMsg{AppKey: appKey, Err: err}
-		}
-		return m, tea.Batch(pcmd, reviewStartedCmd, reviewCmd)
-
-	case screens.ReviewStartedMsg:
-		pm, cmd := m.pipeline.Update(msg)
-		m.pipeline = pm
-		return m, cmd
-
-	case screens.ReviewDoneMsg:
-		// Forward to pipeline so it sets review-pending or error.
-		pm, pcmd := m.pipeline.Update(msg)
-		m.pipeline = pm
-		if msg.Err != nil {
-			return m, pcmd
-		}
-		// If --review-only deleted the JSON because there were zero findings,
-		// the CV is clean and we can auto-render the PDF directly.
-		num, jdBase := jobPathParts(m.careerOpsPath, msg.AppKey)
-		if num == "" {
-			return m, pcmd
-		}
-		reviewJSON := filepath.Join(m.careerOpsPath, "output", "customized-cvs", jdBase+"-cv-review.json")
-		if _, err := os.Stat(reviewJSON); err == nil {
-			// Findings exist — wait for the user to walk through.
-			return m, pcmd
-		}
-		// No findings — auto-render PDF.
-		cvPath := filepath.Join(m.careerOpsPath, "output", "customized-cvs", jdBase+"-cv.md")
-		app, _ := m.pipeline.AppByKey(msg.AppKey)
-		appKey := msg.AppKey
-		careerOpsPath := m.careerOpsPath
-		renderRequest := func() tea.Msg {
-			return screens.RenderPDFRequestedMsg{
-				CareerOpsPath: careerOpsPath,
-				AppKey:        appKey,
-				App:           app,
-				CVPath:        cvPath,
-			}
-		}
-		return m, tea.Batch(pcmd, renderRequest)
-
 	case screens.PipelineFactCheckMsg:
 		// Open the new split-view fact-check screen for the given app.
 		num := reportNum(msg.App.ReportPath)
@@ -348,7 +240,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		// Resolve the artifact base from the generated CV on disk rather than
 		// from data/jds/, so the review still opens after its source JD is
-		// deleted. An empty base means no generated CV — user must press `g`.
+		// deleted. An empty base means no generated CV — user must run tailor (`t`).
 		base := data.CustomizedCVBase(msg.CareerOpsPath, num)
 		if base == "" {
 			return m, nil
@@ -538,22 +430,6 @@ type pdfRenderResult struct {
 	err       error
 }
 
-// jobPathParts derives the 3-digit num and "{NUM}-{slug}" base from an
-// appKey (which is usually a report path). Returns ("","") when no JD is
-// found on disk.
-func jobPathParts(careerOpsPath, appKey string) (string, string) {
-	num := reportNum(appKey)
-	if num == "" {
-		return "", ""
-	}
-	jdFile := findJDFileByNum(careerOpsPath, num)
-	if jdFile == "" {
-		return "", ""
-	}
-	jdBase := strings.TrimSuffix(filepath.Base(jdFile), ".md")
-	return num, jdBase
-}
-
 func (m appModel) View() string {
 	switch m.state {
 	case viewReport:
@@ -575,26 +451,6 @@ func (m appModel) View() string {
 // assuming exactly 3 digits.
 func reportNum(reportPath string) string {
 	return data.LeadingNum(reportPath)
-}
-
-// findJDFileByNum returns the data/jds/{NUM}-*.md file matching the given number.
-func findJDFileByNum(careerOpsPath, num string) string {
-	jdsDir := filepath.Join(careerOpsPath, "data", "jds")
-	entries, err := os.ReadDir(jdsDir)
-	if err != nil {
-		return ""
-	}
-	prefix := num + "-"
-	for _, e := range entries {
-		name := e.Name()
-		if !strings.HasPrefix(name, prefix) {
-			continue
-		}
-		if strings.HasSuffix(name, ".md") || strings.HasSuffix(name, ".txt") {
-			return filepath.Join(jdsDir, name)
-		}
-	}
-	return ""
 }
 
 // reApplyAgentEnv extracts the `CAREER_OPS_APPLY_AGENT` value from the repo

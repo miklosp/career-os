@@ -30,7 +30,7 @@ Every URL takes the same path as a **background agent**. Multiple URLs = paralle
 1. **Fetch** — `lib/fetch-jd.mjs` (deterministic, zero-token): dedup, reserve NUM via `lib/next-num.mjs`, save `data/jds/{NUM}-*.md`, insert `Fetched` row. `modes/_fetch.md` is the LLM fallback only on `unknown-host`/`error`; it teaches `lib/ats-registry.json` so the next hit is zero-token.
 2. **Location gate** — `modes/_location-gate.md` vs `config/profile.md` frontmatter → `location_policy`. On SKIP: status `Skipped-Location`, quoted JD evidence in Notes, stop.
 3. **Score** — `modes/_eval.md`, Sonnet, inline in the agent (no nested subprocess). JD-text-only triage, **zero WebSearch**. A/B/C/D scored; weighted global score in the `**Score:**` header. Writes `data/reports/{NUM}-*.md` + a TSV in `data/tracker-additions/`.
-4. **CV personalization** — user-triggered only (dashboard `g`).
+4. **CV personalization** — user-triggered only (dashboard `t` → interactive `tailor` session, or `/career-ops tailor`).
 
 Agents NEVER call `merge-tracker.mjs` or `dedup-tracker.mjs` — only the user does.
 
@@ -51,8 +51,9 @@ Agents NEVER call `merge-tracker.mjs` or `dedup-tracker.mjs` — only the user d
 | Score a real-interview transcript | `analyze` |
 | First-run setup (missing config) | `onboarding` (see below) |
 
-CV/PDF generation is not a skill mode — it is triggered from the dashboard `g`
-key (generator model set by `GENERATION_MODEL` in `.env`); see `README.md`.
+CV/PDF generation runs through the `tailor` mode — dashboard `t` key or
+`/career-ops tailor` (generator model set by `GENERATION_MODEL` in `.env`);
+see `README.md`.
 
 Use path references to mode files, never inline their content into agent prompts — the agent reads only what it needs via Read.
 

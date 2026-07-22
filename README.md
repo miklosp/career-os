@@ -56,7 +56,7 @@ Anything under `config/`, `data/`, or `output/` belongs to the user and is gitig
 - `/career-ops storybank [review | add | status]` — interactive story-bank management.
 - `/career-ops practice` · `mock` · `analyze` — drill loop, full simulated interview, and real-transcript scoring against the shared rubric.
 - `/career-ops onboarding` — first-run setup walkthrough (also auto-triggered when a required config file is missing).
-- CV PDF generation runs from the dashboard `g` key, not a slash command (see below).
+- CV PDF generation runs through the interactive tailor session — dashboard `t` key or `/career-ops tailor {NUM}` (see below).
 - `pnpm cv-project [--archetype product|ai|design] [--tier core|default|depth] [--budget N]` — deterministic generic CV projection (no LLM; output is a strict subset of `cv.json`, source-true by construction). Safe path for LinkedIn / personal site / recruiter sends.
 - `node merge-tracker.mjs` — fold pending scoring TSVs into `data/applications.md` (user-triggered only).
 - `go -C dashboard build -o career-dashboard .` — rebuild the TUI (the Go module lives in `dashboard/`).
