@@ -17,32 +17,20 @@ import (
 
 // hasPendingReview returns true when a cv-review.json file exists for the
 // given app — signalling that the user has not yet walked through the review.
-// Returns false for apps with no report or no derivable NUM.
+// The artifact base is resolved from the generated CV on disk, not from
+// data/jds/, so a pending review still opens after its source JD is deleted.
+// Returns false for apps with no report, no derivable NUM, or no generated CV.
 func hasPendingReview(careerOpsPath string, app model.CareerApplication) bool {
 	num := data.LeadingNum(app.ReportPath)
 	if num == "" {
 		return false
 	}
-	// Find JD file to derive slug.
-	jdsDir := filepath.Join(careerOpsPath, "data", "jds")
-	entries, err := os.ReadDir(jdsDir)
-	if err != nil {
+	base := data.CustomizedCVBase(careerOpsPath, num)
+	if base == "" {
 		return false
 	}
-	jdPrefix := num + "-"
-	var slug string
-	for _, e := range entries {
-		n := e.Name()
-		if strings.HasPrefix(n, jdPrefix) && strings.HasSuffix(n, ".md") {
-			slug = strings.TrimSuffix(strings.TrimPrefix(n, jdPrefix), ".md")
-			break
-		}
-	}
-	if slug == "" {
-		return false
-	}
-	reviewPath := filepath.Join(careerOpsPath, "output", "customized-cvs", fmt.Sprintf("%s-%s-cv-review.json", num, slug))
-	_, err = os.Stat(reviewPath)
+	reviewPath := filepath.Join(careerOpsPath, "output", "customized-cvs", base+"-cv-review.json")
+	_, err := os.Stat(reviewPath)
 	return err == nil
 }
 
@@ -730,18 +718,6 @@ func (m PipelineModel) handleKey(msg tea.KeyMsg) (PipelineModel, tea.Cmd) {
 			}
 		}
 
-	case "p":
-		for i, tab := range pipelineTabs {
-			if tab.filter == filterProgress {
-				m.activeTab = i
-				break
-			}
-		}
-		m.clearSearch()
-		m.applyFilterAndSort()
-		m.cursor = 0
-		m.scrollOffset = 0
-
 	case "r":
 		return m, func() tea.Msg { return PipelineRefreshMsg{} }
 
@@ -771,7 +747,7 @@ func (m PipelineModel) handleKey(msg tea.KeyMsg) (PipelineModel, tea.Cmd) {
 			}
 		}
 
-	case "P":
+	case "p":
 		// Bulk prune: open the confirm modal seeded at the default cutoff.
 		// Only offered on list tabs (the modal overlays the row body) and when
 		// at least one scored, non-committed row exists.
@@ -1492,7 +1468,7 @@ func (m PipelineModel) renderHelp() string {
 		hint("", "a", "pply"),
 		hint("", "c", "hange"),
 		hint("", "d", "iscard"),
-		hint("", "P", "rune"),
+		hint("", "p", "rune"),
 		hint("", "g", "enerate CV"),
 		hint("", "f", "ind"),
 		hint("", "r", "efresh"),

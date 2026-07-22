@@ -1003,10 +1003,37 @@ func ScanOutputCVsByNum(careerOpsPath string) map[string]bool {
 }
 
 // ScanOutputReviewsByNum scans output/customized-cvs/ and returns a set of
-// 3-digit report numbers that have a pending CV review JSON on disk — meaning
-// the user has not yet walked through the fact-check findings.
+// report numbers that have a pending CV review JSON on disk *and* the generated
+// -cv.md it reviews. A review whose -cv.md sibling is gone cannot be opened (the
+// fact-check screen shows the CV, and finalize renders it to PDF), so it is
+// excluded — the row must be regenerated (`g`) rather than showing a dead
+// "Review" badge that Enter refuses to open.
 func ScanOutputReviewsByNum(careerOpsPath string) map[string]bool {
-	return scanOutputByNumSuffix(careerOpsPath, "-cv-review.json")
+	outDir := filepath.Join(careerOpsPath, "output", "customized-cvs")
+	entries, err := os.ReadDir(outDir)
+	if err != nil {
+		return nil
+	}
+	haveCV := make(map[string]bool)
+	for _, e := range entries {
+		if name := e.Name(); strings.HasSuffix(name, "-cv.md") {
+			haveCV[strings.TrimSuffix(name, "-cv.md")] = true
+		}
+	}
+	result := make(map[string]bool)
+	for _, e := range entries {
+		name := e.Name()
+		if !strings.HasSuffix(name, "-cv-review.json") {
+			continue
+		}
+		if !haveCV[strings.TrimSuffix(name, "-cv-review.json")] {
+			continue
+		}
+		if num := LeadingNum(name); num != "" {
+			result[num] = true
+		}
+	}
+	return result
 }
 
 // LeadingNum returns the zero-padded numeric prefix of a report/JD/CV filename
@@ -1024,6 +1051,28 @@ func LeadingNum(name string) string {
 		return ""
 	}
 	return base[:i]
+}
+
+// CustomizedCVBase returns the "{NUM}-{slug}" artifact base shared by an app's
+// generated CV files (…-cv.md, …-cv-review.json, …-trace.json) by locating the
+// …-cv.md file in output/customized-cvs/. Unlike reconstructing the slug from
+// data/jds/{NUM}-*.md, this survives deletion of the source JD — which the
+// generated artifacts do not depend on. Returns "" when no generated CV exists
+// for num.
+func CustomizedCVBase(careerOpsPath, num string) string {
+	outDir := filepath.Join(careerOpsPath, "output", "customized-cvs")
+	entries, err := os.ReadDir(outDir)
+	if err != nil {
+		return ""
+	}
+	prefix := num + "-"
+	for _, e := range entries {
+		name := e.Name()
+		if strings.HasPrefix(name, prefix) && strings.HasSuffix(name, "-cv.md") {
+			return strings.TrimSuffix(name, "-cv.md")
+		}
+	}
+	return ""
 }
 
 func scanOutputByNumSuffix(careerOpsPath, suffix string) map[string]bool {

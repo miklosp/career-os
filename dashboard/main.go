@@ -337,17 +337,15 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if num == "" {
 			return m, nil
 		}
-		jdFile := findJDFileByNum(msg.CareerOpsPath, num)
-		if jdFile == "" {
+		// Resolve the artifact base from the generated CV on disk rather than
+		// from data/jds/, so the review still opens after its source JD is
+		// deleted. An empty base means no generated CV — user must press `g`.
+		base := data.CustomizedCVBase(msg.CareerOpsPath, num)
+		if base == "" {
 			return m, nil
 		}
-		jdBase := strings.TrimSuffix(filepath.Base(jdFile), ".md")
-		cvPath := filepath.Join(msg.CareerOpsPath, "output", "customized-cvs", jdBase+"-cv.md")
-		reviewJSONPath := filepath.Join(msg.CareerOpsPath, "output", "customized-cvs", jdBase+"-cv-review.json")
-		if _, err := os.Stat(cvPath); err != nil {
-			// No generated CV on disk yet — user must press `g` first.
-			return m, nil
-		}
+		cvPath := filepath.Join(msg.CareerOpsPath, "output", "customized-cvs", base+"-cv.md")
+		reviewJSONPath := filepath.Join(msg.CareerOpsPath, "output", "customized-cvs", base+"-cv-review.json")
 		key := msg.App.ReportPath
 		if key == "" {
 			key = msg.App.Company + "/" + msg.App.Role
