@@ -25,10 +25,10 @@ Everything else — the identity header, role titles, company names, dates, loca
 
 A deterministic validator runs on your output and **rejects the whole run** on any violation. These are not guidelines:
 
-- **C1.** Every Experience bullet MUST end with `[src: <id>]` citing the one source id that supports it. The id must resolve to a Source CV bullet id, a Story Bank `S0xx`, a confirmed Note id (`n#`), or a Block-A Match id. Unknown/missing id → reject.
+- **C1.** Every Experience bullet MUST end with `[src: <id>]` (or `[src: id, id]` when merging sources) citing the source id(s) that support it. Every id must resolve to a Source CV bullet id, a Story Bank `S0xx`, a confirmed Note id (`n#`), or a Block-A Match id. Unknown/missing id → reject.
 - **C2.** The Professional Summary MUST end with a **composite** citation listing every id its claims rest on: `[src: secberus-b1, weave-works-head-of-user-experience-b4, S012]`. Every named entity in the Summary (title, skill, tool, metric, employer) must be backed verbatim (or via an approved alias) by the union of those cited sources, or be a registered `<bridge>`. The Summary gets the **strictest** check — no softening.
 - **C3.** Core Competencies is **closed-world**: choose 8–12 items drawn ONLY from the Source CV's Core Competencies list (that list is the full skills inventory). You may reorder and subset; you may NOT introduce any competency not in that list. Block-A Gaps may not appear.
-- **C4.** Bullets carry exactly one `[src: id]`. If a bullet legitimately merges two source bullets, cite the primary and emit the second as needed; do not invent a blended claim. The cited source must actually support the bullet's specific entities (languages, tools, frameworks, metrics, employers, year counts) verbatim or via an approved alias.
+- **C4.** Bullets cite 1–3 source ids. A bullet that legitimately merges two source bullets cites both — every specific claim in the bullet must be supported by the **union** of its cited sources. Never invent a blended claim that no cited source supports, and never pad the citation with ids that contribute nothing. The cited sources must actually support the bullet's specific entities (languages, tools, frameworks, metrics, employers, year counts) verbatim or via an approved alias.
 
 The `[src: …]` tags are stripped before rendering — they never appear in the final CV. Write them anyway; they are how the system proves every line traces to truth.
 

@@ -30,12 +30,14 @@ The **Job Description is CONTEXT ONLY** — never a source of candidate truth. Y
 
 ## Citation-grounded checking (do this first within Stage B)
 
-Walk the Citation Map. For each generated bullet, compare it to the source text behind its cited id(s). Flag when:
-- the cited source does **not** actually support the bullet's specific claim (entities, metrics, scope) → `fabricated` or `stretched`;
-- the bullet cites a plausible id but adds a language/framework/SDK/metric/year-count the cited source lacks → `fabricated`;
-- the Summary's composite omits an id for a claim it makes, or a cited id doesn't back the stated entity → `fabricated`/`stretched`.
+Walk the Citation Map. A bullet may cite **multiple** ids — judge it against the **union** of its cited sources' texts. Flag when:
+- no cited source — nor any other closed-world source — supports the bullet's specific claim (entities, metrics, scope) → `fabricated` or `stretched`;
+- the bullet adds a language/framework/SDK/metric/year-count that no closed-world source contains → `fabricated`;
+- the Summary makes a claim no closed-world source backs → `fabricated`/`stretched`.
 
-This citation cross-check is your highest-signal task — it is exactly the failure a same-family judge misses.
+**Severity is decided by the closed world, not by citation bookkeeping.** If a claim is not covered by its cited sources but IS supported by another closed-world source you can name (a different CV bullet id, a story, a confirmed note, a Block-A Match), it is true and interview-defensible: name that source in your reasoning and emit NO finding for it. The `[src]` tags are stripped before rendering and never reach a recruiter — a content-deleting "fix" for a citation gap makes the CV worse, not safer.
+
+This cross-check is your highest-signal task — it is exactly the failure a same-family judge misses.
 
 ## Inputs you receive
 
