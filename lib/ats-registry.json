@@ -222,15 +222,6 @@
       "added": "2026-06-09"
     },
     {
-      "match": "jobs.smartrecruiters.com",
-      "matchType": "host",
-      "handler": "smartrecruiters",
-      "params": {},
-      "note": "SmartRecruiters public posting API: GET https://api.smartrecruiters.com/v1/companies/{org}/postings/{id}",
-      "source": "learned",
-      "added": "2026-06-10"
-    },
-    {
       "match": "careers.treebula.se",
       "matchType": "host",
       "handler": "teamtailor",
@@ -326,6 +317,110 @@
       "note": "custom careers page fronting Greenhouse; query param gh_jid maps to boards-api.greenhouse.io/v1/boards/imubit/jobs/{id}",
       "source": "learned",
       "added": "2026-07-02"
+    },
+    {
+      "match": "careers.fyul.com",
+      "matchType": "host",
+      "handler": "teamtailor",
+      "params": {},
+      "note": "FYUL custom domain fronting Teamtailor (JSON-LD JobPosting on page)",
+      "source": "learned",
+      "added": "2026-07-21"
+    },
+    {
+      "match": "www.mintel.com",
+      "matchType": "host",
+      "handler": "greenhouse",
+      "params": {
+        "org": "mintel"
+      },
+      "note": "gh_jid embed on company careers page",
+      "source": "learned",
+      "added": "2026-07-21"
+    },
+    {
+      "match": "content.red-badger.com",
+      "matchType": "host",
+      "handler": "greenhouse",
+      "params": {
+        "org": "redbadger"
+      },
+      "note": "Red Badger custom careers domain embeds Greenhouse via ?gh_jid= query param",
+      "source": "learned",
+      "added": "2026-07-21"
+    },
+    {
+      "match": "thunes.com",
+      "matchType": "host",
+      "handler": "greenhouse",
+      "params": {
+        "org": "thunes"
+      },
+      "note": "Thunes careers page embeds Greenhouse jobs at /jobs/{gh_jid}",
+      "source": "learned",
+      "added": "2026-07-21"
+    },
+    {
+      "match": "osv-cfainstitute.wd5.myworkdayjobs.com",
+      "matchType": "host",
+      "handler": "workday",
+      "params": {
+        "tenant": "osv_cfainstitute"
+      },
+      "note": "tenant slug uses underscore internally, hostname uses hyphen",
+      "source": "learned",
+      "added": "2026-07-21"
+    },
+    {
+      "match": "careers.nebius.com",
+      "matchType": "host",
+      "handler": "greenhouse",
+      "params": {
+        "org": "nebius"
+      },
+      "note": "custom domain fronting Greenhouse; job id via ?gh_jid= query param, not path",
+      "source": "learned",
+      "added": "2026-07-21"
+    },
+    {
+      "match": "www.refurbed.de",
+      "matchType": "host",
+      "handler": "greenhouse",
+      "params": {
+        "org": "refurbed"
+      },
+      "note": "company site embeds Greenhouse via gh_jid query param",
+      "source": "learned",
+      "added": "2026-07-21"
+    },
+    {
+      "match": "pqshield.com",
+      "matchType": "host",
+      "handler": "greenhouse",
+      "params": {
+        "org": "pqshield"
+      },
+      "note": "careers page fronts Greenhouse via ?gh_jid= param",
+      "source": "learned",
+      "added": "2026-07-21"
+    },
+    {
+      "match": "careers.brightlocal.com",
+      "matchType": "host",
+      "handler": "teamtailor",
+      "params": {},
+      "note": "custom domain fronting Teamtailor; JSON-LD JobPosting in page HTML",
+      "source": "learned",
+      "added": "2026-07-21"
+    },
+    {
+      "match": "\\.icims\\.com",
+      "matchType": "regex",
+      "handler": "xh",
+      "params": {},
+      "note": "iCIMS ATS — schema.org JobPosting JSON-LD embedded on posting page, generic xh handler works",
+      "source": "learned",
+      "added": "2026-07-21"
     }
   ]
 }
