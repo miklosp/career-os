@@ -24,8 +24,8 @@ LLM-tailored rewrite), one closed-world evidence contract enforced across both.
                │                       │            │               │
                │                       │            ▼               │
                │                       │   cv-fact-check.mjs        │
-               │                       │   (GPT — ATS simulation +  │
-               │                       │    cross-family fact-check)│
+               │                       │   (parallel: GPT ATS sim + │
+               │                       │    Gemini fact-check)      │
                │                       └────────────┬───────────────┘
                ▼                                    ▼
       Generic CV (LinkedIn,                Per-JD application CV
@@ -76,10 +76,10 @@ derivable; see [Authored metadata preservation](#authored-metadata-preservation)
 | `cv-project.mjs` (`pnpm cv-project`) | Deterministic projection: filters highlights by `--tier`, `--archetype`, `--budget`; prunes empty roles; emits projected `cv.json` or derived markdown. Zero tokens. |
 | `generate-cv-llm.mjs` (`pnpm cv-llm`) | Per-JD tailored rewrite. Opus reads `cv.json` (id-annotated), confirmed `notes.yml`, `story-bank.md`, and the latest `data/reports/{NUM}-*.md`. Every output bullet must end `[src: id]`; Summary ends a composite `[src: …]`. |
 | `cv-validate.mjs` | Hard-fail validator: Rule A (every bullet has `[src: id]`), B (≥0.12 token overlap with cited source — soft flag for the judge), C (high-risk entities present in cited source), D (Core Competencies ⊆ `skills_inventory ∪ aliases.yml`). On fail, retries the generator with a `<failed_constraints>` diff (max 2) then surfaces — never auto-revises. |
-| `cv-fact-check.mjs` (`pnpm fact-check`) | Consolidated reviewer (`REVIEW_MODEL`, GPT family — same family as Ashby's evaluator, still cross-family from the generator). One call, two stages: ATS criteria simulation (CV text only) + citation-grounded fact-check. Computes met/total and expected×verdict deviations in Node; writes the merged review JSON consumed by the dashboard walkthrough. Independent control from the validator. |
+| `cv-fact-check.mjs` (`pnpm fact-check`) | Review pass: two parallel calls — ATS criteria simulation (CV text only; `REVIEW_MODEL`, same family as Ashby's evaluator) + citation-grounded fact-check (`FACTCHECK_MODEL`, a third model family). Computes met/total and expected×verdict deviations in Node; merges both into the review JSON consumed by the dashboard walkthrough. Independent control from the validator. |
 | `cv-status.mjs` | Deterministic, zero-token CV health check used by `modes/cv.md`. File presence, coverage, quantification, tier/archetype distribution, story-bank gaps, keyword-aggregation eligibility, integrity. Composite score + prioritized next actions. |
 | `keyword-frequency.mjs` (`pnpm kw-analysis`) | Cross-report keyword aggregation with `--min-score` weighting and `strong/partial/gap` coverage classification. Advisory input to `modes/cv.md` — never the selection authority. |
-| `prompts/ats-prompt.md`, `prompts/cv-review-prompt.md` | Generator + reviewer system prompts. Generic; candidate specifics injected at run time. |
+| `prompts/ats-prompt.md`, `prompts/cv-review-prompt.md`, `prompts/ats-sim-prompt.md` | Generator, fact-checker, and ATS-simulator system prompts. Generic; candidate specifics injected at run time. |
 
 ## The deterministic path
 
