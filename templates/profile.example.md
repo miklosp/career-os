@@ -40,8 +40,14 @@ location_policy:
     - "Americas"
     - "US"
     - "United States"
+  # Languages the job ad may be written in. A JD in anything else is skipped
+  # before scoring. Supported names: English, German, Swedish, Danish,
+  # Norwegian, Dutch, French, Spanish, Italian, Portuguese, Polish, Finnish.
+  jd_languages:
+    - "English"
   # Which rules to enforce. Comment out or remove to disable individual rules.
   skip_on:
+    - jd_language_not_allowed
     - remote_scope_excludes_home_country
     - onsite_outside_home_country
     - us_work_auth_required

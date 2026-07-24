@@ -4,14 +4,16 @@ Runs after `modes/_fetch.md` has saved a JD under `data/jds/{NUM}-*.md` and befo
 `modes/_eval.md` spends tokens scoring it. Cheap, deterministic, honest —
 when a role can't work geographically, skip it with the evidence quoted.
 
-**Deterministic short-circuit first.** `auto-pipeline.md` calls
+**Deterministic short-circuit first.** The auto-pipeline (via
+`lib/prep-jds.mjs`, or the solo-agent flow directly) calls
 `node lib/location-gate.mjs {NUM}` before this LLM gate runs. That script
-fires SKIP for any JD whose `**Remote scope:** onsite:City` / `hybrid:City`
-header points at a country outside `home_country` (and not literally listed
-in `remote_allowed_scopes`). If it returns ALLOW or SKIP, this file is not
-read. It only falls through to this LLM gate on `NEEDS_LLM` — i.e. when the
-JD's structured scope is missing or ambiguous and the body needs human-style
-judgment for Rules 3 / 4 / 5 / 6 below.
+fires SKIP for any JD written outside `jd_languages`, and for any JD whose
+`**Remote scope:** onsite:City` / `hybrid:City` header points at a country
+outside `home_country` (and not literally listed in `remote_allowed_scopes`).
+If it returns ALLOW or SKIP, this file is not read. It only falls through to
+this LLM gate on `NEEDS_LLM` — i.e. when the JD's language is undetermined, or
+its structured scope is missing or ambiguous and the body needs human-style
+judgment for Rules 0 / 3 / 4 / 5 / 6 below.
 
 ## Input
 
@@ -35,7 +37,8 @@ If present, pull these fields (with defaults in case of partial config):
 | `us_work_authorization` (default true) | rule 3 |
 | `relocation_open` (default false) | rule 4 |
 | `remote_allowed_scopes` (default `[home_country]`) | rules 1, 6 |
-| `skip_on` (list of rule ids) | which rules are enabled (ids: `remote_scope_excludes_home_country`, `onsite_outside_home_country`, `us_work_auth_required`, `onsite_and_relocation_required`, `timezone_outside_home_tolerance`, `residency_required_outside_home_country`, `hybrid_outside_home_country`) |
+| `jd_languages` (default: rule off) | rule 0 |
+| `skip_on` (list of rule ids) | which rules are enabled (ids: `jd_language_not_allowed`, `remote_scope_excludes_home_country`, `onsite_outside_home_country`, `us_work_auth_required`, `onsite_and_relocation_required`, `timezone_outside_home_tolerance`, `residency_required_outside_home_country`, `hybrid_outside_home_country`) |
 
 ## Step 2 — Read the JD header
 
@@ -53,6 +56,27 @@ Plus the body text — you may need a direct quote for the evidence string.
 
 Check each rule in `skip_on`. Stop at the first SKIP and report it. If all
 enabled rules pass, return ALLOW.
+
+### Rule 0: `jd_language_not_allowed`
+
+Fail if the JD body prose is written in a language that is not listed in
+`jd_languages`. Check this first — a JD the candidate can't read is out
+regardless of geography.
+
+Judge the **body prose only**. The fetcher writes the header block
+(`**Location:**`, `**Remote scope:**`, …) in English on every posting, and job
+titles, tool names and company boilerplate are often English inside an
+otherwise foreign-language ad.
+
+- Mixed ads: if a full description exists in an allowed language (side-by-side
+  translation, or an allowed-language section covering role + requirements),
+  pass. Only skip when the substantive content is exclusively in a
+  non-allowed language.
+- Fewer than ~60 words of prose, or genuinely borderline → **ALLOW**. Never
+  skip on ambiguity.
+
+Evidence: quote the first substantive non-allowed-language sentence, prefixed
+with the language you detected — `German — Wir suchen einen erfahrenen …`.
 
 ### Rule 1: `remote_scope_excludes_home_country`
 
