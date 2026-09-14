@@ -53,6 +53,9 @@ location_policy:
     - us_work_auth_required
     - onsite_and_relocation_required
     - timezone_outside_home_tolerance
+    # Skip roles that list an office in another country and never mention
+    # remote work (the JD is silent, the form then asks "do you live here?").
+    - location_unspecified_outside_home_country
 ---
 
 # User Profile Context — career-ops (Jane Smith)

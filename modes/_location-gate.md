@@ -7,9 +7,11 @@ when a role can't work geographically, skip it with the evidence quoted.
 **Deterministic short-circuit first.** The auto-pipeline (via
 `lib/prep-jds.mjs`, or the solo-agent flow directly) calls
 `node lib/location-gate.mjs {NUM}` before this LLM gate runs. That script
-fires SKIP for any JD written outside `jd_languages`, and for any JD whose
+fires SKIP for any JD written outside `jd_languages`, for any JD whose
 `**Remote scope:** onsite:City` / `hybrid:City` header points at a country
-outside `home_country` (and not literally listed in `remote_allowed_scopes`).
+outside `home_country` (and not literally listed in `remote_allowed_scopes`),
+and for any `unspecified`-scope JD whose `**Location:**` names such a country
+while the body never mentions remote work (Rule 8).
 If it returns ALLOW or SKIP, this file is not read. It only falls through to
 this LLM gate on `NEEDS_LLM` — i.e. when the JD's language is undetermined, or
 its structured scope is missing or ambiguous and the body needs human-style
@@ -38,7 +40,7 @@ If present, pull these fields (with defaults in case of partial config):
 | `relocation_open` (default false) | rule 4 |
 | `remote_allowed_scopes` (default `[home_country]`) | rules 1, 6 |
 | `jd_languages` (default: rule off) | rule 0 |
-| `skip_on` (list of rule ids) | which rules are enabled (ids: `jd_language_not_allowed`, `remote_scope_excludes_home_country`, `onsite_outside_home_country`, `us_work_auth_required`, `onsite_and_relocation_required`, `timezone_outside_home_tolerance`, `residency_required_outside_home_country`, `hybrid_outside_home_country`) |
+| `skip_on` (list of rule ids) | which rules are enabled (ids: `jd_language_not_allowed`, `remote_scope_excludes_home_country`, `onsite_outside_home_country`, `us_work_auth_required`, `onsite_and_relocation_required`, `timezone_outside_home_tolerance`, `residency_required_outside_home_country`, `hybrid_outside_home_country`, `location_unspecified_outside_home_country`) |
 
 ## Step 2 — Read the JD header
 
@@ -123,9 +125,35 @@ Examples with `home_timezone: CET` and `timezone_tolerance_hours: 1`:
 
 ### Rule 7: `hybrid_outside_home_country`
 
-Fail if `Remote scope` starts with `hybrid:` and the city is outside `home_country` and the city is not within a region listed in `remote_allowed_scopes`. Hybrid requires recurring office attendance — not viable for a candidate based outside `home_country` unless `relocation_open: true`.
+Fail if the role requires **recurring physical office attendance** at a location
+outside `home_country`, and `relocation_open` is `false`.
 
-Evidence: the `**Remote scope:** hybrid:{city}` header line, or the JD sentence naming the office and the hybrid expectation.
+Check both places it shows up:
+
+- **Header** — `Remote scope` starts with `hybrid:{city}` and that city's country
+  is outside `home_country`.
+- **Body** — the header is `unspecified`, `full-remote-region:{X}`, or silent on
+  attendance, but the prose states a recurring on-site expectation tied to a
+  named office: "3 days per week in our Munich office", "40% on-site",
+  "hybrid, based from our Vilnius office", "one week per month at HQ".
+
+**A region in `remote_allowed_scopes` does NOT excuse this.** Those tokens (`EU`,
+`EMEA`, `Europe`, `Nordics`) declare where the candidate may work *remotely*
+from — they are not a willingness to commute. A hybrid role in Munich is out
+from Stockholm even though both are in the EU. Only an exact **literal country**
+match in `remote_allowed_scopes` (e.g. `Sweden`) passes. This mirrors
+`lib/location-gate.mjs`, which applies the same literal-country test to
+`onsite:`/`hybrid:` headers — keep the two in step.
+
+Stays ALLOW (never skip on ambiguity):
+
+- Optional or aspirational office language: "office available if you want it",
+  "we meet in person a few times a year", "occasional travel to HQ"
+- Company onsites/offsites at a stated low frequency (quarterly or rarer)
+- A named office city with no stated attendance requirement
+
+Evidence: the `**Remote scope:** hybrid:{city}` header line, or the exact JD
+sentence stating the office and its attendance cadence.
 
 ### Rule 6: `residency_required_outside_home_country`
 
@@ -147,6 +175,24 @@ This catches roles that are remote-on-paper (`Remote scope` may be `unspecified`
 - Any residency language that is vague or aspirational rather than a stated requirement — **never skip on ambiguity**
 
 Evidence: quote the exact JD sentence stating the residency/eligibility requirement.
+
+### Rule 8: `location_unspecified_outside_home_country`
+
+Fail if `Remote scope` is `unspecified`, `Location` names a country outside
+`home_country` (no literal country match in `remote_allowed_scopes`, not the
+home city), and the JD body says nothing about remote work. A JD that lists an
+office city and never mentions remote is an office role there by default —
+the application form usually asks "do you reside in this location?".
+
+`lib/location-gate.mjs` fires this deterministically when the body has no
+remote/WFH wording at all. It reaches this LLM gate only when the body does
+mention remote somewhere: pass if that wording opens the role to the candidate
+(remote from `remote_allowed_scopes`, "remote-first", "work from anywhere");
+skip if it is confined to that country ("remote within Germany") or is
+incidental ("occasional remote days", "remote-friendly office").
+
+Evidence: the `**Location:**` header line, or the JD sentence tying the role to
+the office / country.
 
 ## Step 4 — Emit the verdict
 
