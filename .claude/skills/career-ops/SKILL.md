@@ -17,7 +17,7 @@ Determine the mode from `{{mode}}`:
 | Input | Mode |
 |-------|------|
 | (empty / no args) | `discovery` -- Show command menu |
-| One or more URLs (no sub-command) | **`auto-pipeline`** — fan out one background agent per URL |
+| One or more URLs (no sub-command) | **`auto-pipeline`** — zero-token prep script, then batched background eval agents |
 | `scan` | `scan` |
 | `apply` | `apply` |
 | `tailor` (optional `{NUM}` / company / URL) | `tailor` |
@@ -32,9 +32,9 @@ Determine the mode from `{{mode}}`:
 
 **Auto-pipeline detection:** If `{{mode}}` is not a known sub-command, treat it as input to the pipeline:
 
-- Any number of URLs separated by whitespace → fan out one background agent per URL.
+- Any number of URLs separated by whitespace → the auto-pipeline flow.
 
-Each background agent runs `modes/_fetch.md` → `modes/_location-gate.md` → (if ALLOW) `modes/_eval.md`. The user is never blocked waiting.
+The session runs `node lib/prep-jds.mjs <url...>` inline (fetch + deterministic gate, zero tokens), then dispatches batched background eval agents over the resulting queue — see `modes/auto-pipeline.md`. The user is never blocked waiting.
 
 If `{{mode}}` is not a sub-command AND doesn't look like a URL, show discovery.
 
@@ -46,7 +46,7 @@ Show this menu:
 
 ```
 career-ops -- Command Center
-  /career-ops {url...}       → fetch + location-gate + score each URL in parallel (background)
+  /career-ops {url...}       → prep (zero-token fetch + gate), then score in batched background agents
   /career-ops scan           → discover new offers across portals (prints URLs to dispatch)
   /career-ops apply          → live application assistant (reads form + drafts answers)
   /career-ops tailor {NUM}   → interactive per-application CV: criteria → evidence → generate → review → PDF
@@ -66,15 +66,11 @@ Practice & simulation:
 
 After determining the mode, load the necessary files before executing:
 
-### Auto-pipeline (fetch → gate → score)
+### Auto-pipeline (prep → batched score)
 
-For `auto-pipeline`, the orchestrator reads `modes/auto-pipeline.md` and spawns one background agent per URL with **`model: "sonnet"`**. Each agent runs fetch → gate → score inline (no nested `claude -p` subprocess — the parent agent already runs on Sonnet). The agent reads the mode files it needs via Read; they are **not** inlined into the agent prompt.
+For `auto-pipeline`, the orchestrator reads `modes/auto-pipeline.md`, runs `lib/prep-jds.mjs` inline (zero tokens — fetch + deterministic gate for every URL), chunks the `ready` queue into groups of 4, and spawns one background agent per chunk with **`model: "sonnet"`**, ≤ 3 concurrent. Each agent pulls its whole context in one `lib/eval-context.mjs` call, then reads `modes/_eval.md` once (plus `modes/_location-gate.md` only when a JD is flagged `needs-llm`) and scores each JD as a sealed, independent evaluation. Mode files are **not** inlined into the agent prompt.
 
-Files the agent reads on demand:
-
-1. `modes/_fetch.md` — skipped entirely when the JD is already on disk (the agent self-checks first; see `auto-pipeline.md` Step 0)
-2. `modes/_location-gate.md`
-3. `modes/_eval.md` (which names its own inputs) — only if gate returns ALLOW
+`deferred` URLs (`unknown-host` / `error` / orphaned rows) get one solo background agent each, after the batches — the only path that loads `modes/_fetch.md`.
 
 CV generation is never part of this pipeline.
 
@@ -88,18 +84,16 @@ Applies to: `apply`, `tailor`, `scan`, `interview-prep`, `cover-letter`, `storyb
 
 ### Delegating to subagents
 
-For `scan`, `apply`, and any time the user provides 2+ URLs on `/career-ops`: launch one Agent per URL. Bound concurrency to ≤ 3. Browser-session management (headless for fetch/scan, headed for apply) is each mode's responsibility — see the mode file and the `agent-browser` skill for the ensure-in-mode protocol.
+For URLs on `/career-ops`: batch eval agents per the auto-pipeline flow above. For `scan` and `apply`: launch one Agent per unit of work. Bound concurrency to ≤ 3 in all cases. Browser-session management (headless for fetch/scan, headed for apply) is each mode's responsibility — see the mode file and the `agent-browser` skill for the ensure-in-mode protocol.
 
 **Use path references, never inline mode-file content.** Inlining the 23KB `_fetch.md` and 5KB `_location-gate.md` into every dispatch wastes context on every parallel agent; the agent reads only what it needs via Read.
-
-**One agent shape for every URL.** The agent self-checks whether the JD is already on disk before deciding whether to load `_fetch.md`. This handles scan-prefetched URLs, re-runs, and manually-pasted-twice URLs uniformly — no dispatcher branching needed.
 
 ```
 Agent(
   subagent_type="general-purpose",
   model="sonnet",
-  prompt="Follow modes/auto-pipeline.md per-agent flow for URL: {url}.",
-  description="career-ops pipeline {url}"
+  prompt="Follow the batch-agent flow in modes/auto-pipeline.md for these JDs: {num (gate: allow|needs-llm), ...}. Each JD is an independent, sealed evaluation.",
+  description="career-ops eval batch {nums}"
 )
 ```
 

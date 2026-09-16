@@ -6,10 +6,10 @@ Public, diverged copy of [santifer/career-ops](https://github.com/santifer/caree
 
 An AI job-search pipeline wired into Claude Code:
 
-- **Fetch + gate + score** any job URL through a background agent (`/career-ops {url}`).
-- **Location gate** skips roles that don't fit the candidate's geography before spending tokens scoring.
+- **Fetch + gate + score** any job URL (`/career-ops {url...}`). A zero-token prep script (`lib/prep-jds.mjs`) fetches every JD and runs the deterministic location gate in-session; background agents then score the queue in batches of 4 JDs, pulling their whole context (CV, profile, story-bank digest, JDs) in a single `lib/eval-context.mjs` call. Unknown hosts fall back to solo agents that teach the fetch registry.
+- **Location gate** skips roles that don't fit the candidate's geography before spending tokens scoring — deterministic rules in prep, an LLM pass inside the eval agent for the ambiguous rest.
 - **Structured evaluation** per role: A/B/C/D scored blocks written to `data/reports/{NUM}-*.md`. Triage is JD-text-only with zero WebSearch; compensation, posting-legitimacy, and company-health checks are deferred to `interview-prep` (only run for roles that come back).
-- **Portal scanner** (`scan.mjs`) queries ten ATS APIs directly (Greenhouse, Ashby, Lever, Recruitee, Teamtailor, join.team, Personio, SmartRecruiters, BambooHR, Breezy) plus aggregator sources (LinkedIn via JobSpy, hiring.cafe, We Work Remotely, Remote PM Jobs, RemoteInEurope), deduplicates against `data/scan-history.db` + `data/applications.md`, and prints `DISPATCH_URLS=[...]` for the invoking session to fan out fetch agents.
+- **Portal scanner** (`scan.mjs`) queries ten ATS APIs directly (Greenhouse, Ashby, Lever, Recruitee, Teamtailor, join.team, Personio, SmartRecruiters, BambooHR, Breezy) plus aggregator sources (LinkedIn via JobSpy, We Work Remotely, Remote PM Jobs, RemoteInEurope), deduplicates against `data/scan-history.db` + `data/applications.md`, and prints `DISPATCH_URLS=[...]` for the invoking session to feed into the same prep-then-batch pipeline.
 - **Applications tracker** (`data/applications.md`) — markdown as single source of truth, `Fetched` → `Evaluated` → `Applied` → `Interview` → `Offer`.
 - **CV personalization** — two paths from one canonical `config/cv.json`: a deterministic projector (`lib/cv-project.mjs`) for the generic / LinkedIn / recruiter CV, and an LLM-tailored generator (model set by `GENERATION_MODEL` in `.env`; PDF via WeasyPrint) for per-JD applications triggered from the Go TUI dashboard.
 
@@ -47,10 +47,10 @@ Anything under `config/`, `data/`, or `output/` belongs to the user and is gitig
 
 ## Common invocations
 
-- `/career-ops {url1} {url2} ...` — pipeline one or more URLs (background agents).
-- `/career-ops scan` — scan configured portals, dispatch agents for any new URLs.
+- `/career-ops {url1} {url2} ...` — pipeline one or more URLs (zero-token prep, then batched background eval agents).
+- `/career-ops scan` — scan configured portals, feed any new URLs through the same pipeline.
 - `/career-ops apply` — interactive application assistant.
-- `/career-ops cover-letter [{NUM}]` — one-page cover-letter PDF + paste-ready text.
+- `/career-ops cover-letter [{NUM}]` — one-page cover-letter PDF + paste-ready text (context via `lib/letter-context.mjs`, register from the accepted letters in `config/cover-letters/`).
 - `/career-ops cv` — interactive CV health check, story-bank gap walk, optimization checklist; takes the user from "cv on disk" to "as good as it gets".
 - `/career-ops interview-prep` — company-specific interview prep (research artifact).
 - `/career-ops storybank [review | add | status]` — interactive story-bank management.
@@ -95,6 +95,8 @@ cmux new-workspace --name "Apply · <Company>" --cwd <repo> --focus true \
 | `lib/fetch-jd.mjs` | Deterministic zero-token fetcher — built-in matchers (lever/greenhouse/ashby/teamtailor/personio/workday/rippling/recruitee/linkedin/smartrecruiters) + the learned `ats-registry.json` (covers bamboohr/breezy/join.team via generic JSON-LD); `--learn`/`--list` manage the registry |
 | `lib/ats-registry.json` | Learned host→handler map — committed shared wisdom, not user-edited |
 | `lib/ban-list.mjs` | Shared ban predicate; reads `config/portals.yml` → `banned_companies` |
+| `lib/prep-jds.mjs` | Zero-token batch prep — runs `fetch-jd` + `location-gate` over every URL, emits the eval queue as one JSON line; catches already-scored and duplicate listings before any agent spawns |
+| `lib/eval-context.mjs` | One-call context assembly for eval agents — annotated CV, profile, story-bank digest, confirmed notes, report example, and every JD in the batch |
 | `lib/scan-history.mjs` | Single shared persistence layer for `scan-history.db` |
 | `lib/cv-schema.mjs` | One parser/serializer/id authority for `cv.json` ↔ `cv.md`; preserves authored `tier`/`archetypes` across `cv-migrate` |
 | `lib/cv-json-to-md.mjs`, `lib/cv-md-to-json.mjs` | Derived-view render (`cv-build`) and prose re-import (`cv-migrate`) with metadata preservation by stable id |
@@ -105,7 +107,7 @@ cmux new-workspace --name "Apply · <Company>" --cwd <repo> --focus true \
 | `lib/cv-status.mjs` | Deterministic CV health/optimality report consumed by `modes/cv.md` |
 | `lib/keyword-frequency.mjs` | Zero-token cross-report keyword aggregation; advisor input to `modes/cv.md` |
 | `scan.mjs` | Zero-token portal scanner; prints `DISPATCH_URLS=[...]` for the session to dispatch |
-| `modes/_fetch.md`, `_location-gate.md`, `_eval.md` | The three single-purpose pipeline stages |
+| `modes/_fetch.md`, `_location-gate.md`, `_eval.md` | The three single-purpose pipeline stages (`_fetch` is the LLM fallback for hosts the deterministic fetcher can't resolve) |
 | `modes/_writing.md` | Shared writing & ATS standards for candidate-facing text (CV, cover letter, form answers) |
 | `modes/practice.md`, `mock.md`, `analyze.md`, `storybank.md` | Practice & simulation layer (read `modes/_rubrics.md`; mock/analyze also `_round-types.md`) |
 | `config/profile.md` | Candidate identity + `location_policy` (frontmatter), archetypes/narrative/voice (body); never auto-updated |
@@ -146,6 +148,6 @@ Node.js (`.mjs` modules), `agent-browser` (ephemeral session-named Chromium, eve
 ## Notes vs. upstream
 
 - `scan-history` is SQLite (`data/scan-history.db`), not TSV. Legacy TSV preserved as `.bak` after one-shot migration in `scan.mjs`.
-- `data/pipeline.md` deleted — scan output goes straight through `DISPATCH_URLS` to background fetch agents; there is no intermediate queue file.
+- `data/pipeline.md` deleted — scan output goes straight through `DISPATCH_URLS` into the prep script and batched eval agents; there is no intermediate queue file.
 - `update-system.mjs` and all upstream auto-update machinery removed.
 - Go dashboard uses `modernc.org/sqlite` to read `scan-history.db` for URL enrichment.

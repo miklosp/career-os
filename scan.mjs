@@ -19,8 +19,9 @@
  * Zero Claude API tokens — pure HTTP + JSON.
  *
  * New URLs are inserted into data/scan-history.db AND printed as JSON on
- * stdout so the invoking Claude session can dispatch one background
- * fetch+gate+score agent per URL (see modes/auto-pipeline.md).
+ * stdout so the invoking Claude session can feed them into the
+ * auto-pipeline flow: lib/prep-jds.mjs inline, then batched background
+ * eval agents (see modes/auto-pipeline.md).
  *
  * The scan-history DB is opened, migrated, and written exclusively
  * through lib/scan-history.mjs (openScanHistoryDb / recordOffers) —
@@ -67,7 +68,6 @@ import { pathToFileURL } from "url";
 import yaml from "js-yaml";
 import { runLinkedInScan } from "./lib/scan-linkedin.mjs";
 import { runRemoteInEuropeScan } from "./lib/scan-remoteineurope.mjs";
-import { runHiringCafeScan } from "./lib/scan-hiringcafe.mjs";
 import { runWeWorkRemotelyScan } from "./lib/scan-weworkremotely.mjs";
 import { runRemotePmJobsScan } from "./lib/scan-remotepmjobs.mjs";
 import {
@@ -668,8 +668,8 @@ async function main() {
   }
 
   // 5b. LinkedIn — JobSpy discovery + JD prefetch (free, no Apify, zero LLM
-  // tokens). Pre-writes data/jds/ + applications.md row so dispatched
-  // auto-pipeline agents skip _fetch.md and run gate+score only. Employer
+  // tokens). Pre-writes data/jds/ + applications.md row so auto-pipeline
+  // prep dedups instantly and queues gate+score only. Employer
   // ATS URL is resolved here only when LINKEDIN_LI_AT + LINKEDIN_JSESSIONID
   // are set (lib/li-voyager.mjs); otherwise the LinkedIn URL is stored and
   // resolution defers to apply-time.
@@ -696,8 +696,8 @@ async function main() {
   // 5c. remoteineurope.com — sitemap + per-page scrape, free, no Apify.
   // Discovers jobs the aggregator has surfaced; each page links straight
   // to the employer's ATS via a clean apply-button. Helper returns the
-  // resolved employer ATS URLs; auto-pipeline agents fetch+gate+score
-  // those normally (Greenhouse / Ashby / Workable / etc — all structured).
+  // resolved employer ATS URLs; the auto-pipeline preps + scores those
+  // normally (Greenhouse / Ashby / Workable / etc — all structured).
   let rieUrls = [];
   let rieStats = null;
   try {
@@ -710,25 +710,6 @@ async function main() {
     rieStats = result.stats;
   } catch (err) {
     errors.push({ company: "remoteineurope.com", error: err.message });
-  }
-
-  // 5d. hiring.cafe — SSR __NEXT_DATA__ scrape, free, no Apify. Federates
-  // thousands of employer ATSes; the helper returns resolved employer ATS
-  // URLs (Greenhouse / Ashby / Lever / Workable / …), which auto-pipeline
-  // agents fetch+gate+score normally. Driven by hiringcafe_searches in
-  // portals.yml; the global title_filter does the precise include/exclude.
-  let hcUrls = [];
-  let hcStats = null;
-  try {
-    const result = await runHiringCafeScan({
-      db,
-      portalsCfg: config,
-      dryRun,
-    });
-    hcUrls = result.newUrls;
-    hcStats = result.stats;
-  } catch (err) {
-    errors.push({ company: "hiring.cafe", error: err.message });
   }
 
   // 5e. We Work Remotely — full-text category RSS, free, no Apify. The whole
@@ -845,15 +826,6 @@ async function main() {
     console.log(`  Banned skipped:      ${rieStats.banned ?? 0}`);
     console.log(`  New dispatchable:    ${rieStats.dispatched}`);
   }
-  if (hcStats) {
-    console.log(
-      `hiring.cafe:           ${hcStats.searches} searches, ${hcStats.seen} hits scanned, ${hcStats.alreadySeen} already seen, ${hcStats.failed} failed`,
-    );
-    console.log(`  Expired skipped:     ${hcStats.expired}`);
-    console.log(`  Skipped (title):     ${hcStats.skippedTitle}`);
-    console.log(`  Banned skipped:      ${hcStats.banned ?? 0}`);
-    console.log(`  New dispatchable:    ${hcStats.dispatched}`);
-  }
   if (wwrStats) {
     console.log(
       `weworkremotely:        ${wwrStats.feeds} feeds, ${wwrStats.itemsSeen} items scanned, ${wwrStats.alreadySeen} already seen, ${wwrStats.failed} failed`,
@@ -880,7 +852,6 @@ async function main() {
     ...newOffers.map((o) => o.url),
     ...linkedinUrls,
     ...rieUrls,
-    ...hcUrls,
     ...wwrUrls,
     ...pmUrls,
   ].filter((u) => !isBanned({ url: u }));
@@ -904,12 +875,6 @@ async function main() {
       "\nNew offers (remoteineurope.com — resolved employer ATS URLs):",
     );
     for (const url of rieUrls) {
-      console.log(`  + ${url}`);
-    }
-  }
-  if (hcUrls.length > 0) {
-    console.log("\nNew offers (hiring.cafe — resolved employer ATS URLs):");
-    for (const url of hcUrls) {
       console.log(`  + ${url}`);
     }
   }
@@ -943,7 +908,7 @@ async function main() {
     } else {
       console.log(`\nRecorded in ${SCAN_HISTORY_DB_PATH}.`);
       console.log(
-        "Dispatch one background agent per URL below (modes/auto-pipeline.md):\n",
+        "Feed the URLs below into the auto-pipeline flow (modes/auto-pipeline.md — prep script, then batched eval agents):\n",
       );
       console.log("DISPATCH_URLS=" + JSON.stringify(dispatchUrls));
     }

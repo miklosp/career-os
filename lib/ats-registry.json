@@ -96,21 +96,6 @@
       "added": "2026-06-07"
     },
     {
-      "match": "\\.bamboohr\\.com",
-      "matchType": "regex",
-      "handler": "xh",
-      "params": {
-        "ats": "bamboohr",
-        "listEndpoint": "https://{tenant}.bamboohr.com/careers/list",
-        "detailEndpoint": "https://{tenant}.bamboohr.com/careers/{id}/detail",
-        "descriptionKey": "result.jobOpening.description",
-        "titleKey": "result.jobOpening.jobOpeningName"
-      },
-      "note": "BambooHR public careers API. No auth required. List: GET /careers/list → JSON array. Detail: GET /careers/{id}/detail → full JD HTML in result.jobOpening.description. URL pattern: {tenant}.bamboohr.com/careers/{id}. Needs a bamboohr handler in fetch-jd.mjs for zero-token support.",
-      "source": "learned",
-      "added": "2026-06-07"
-    },
-    {
       "match": "fundraiseup.com",
       "matchType": "host",
       "handler": "greenhouse",
@@ -142,15 +127,14 @@
     {
       "match": "\\.breezy\\.hr",
       "matchType": "regex",
-      "handler": "xh",
+      "handler": "breezy",
       "params": {
-        "ats": "breezy",
-        "extraction": "jsonld",
-        "schema": "JobPosting"
+        "ats": "breezy"
       },
-      "note": "Breezy HR ATS — full JobPosting JSON-LD embedded in static HTML page. xh GET + python3 JSON-LD extraction works. URL pattern: {tenant}.breezy.hr/p/{positionId}-{slug}. No auth required. Needs a breezy handler in fetch-jd.mjs for zero-token support.",
+      "note": "Breezy HR ATS — single-tenant portals ({tenant}.breezy.hr/p/{id}-{slug}). Some tenants embed a full JobPosting JSON-LD (handler tries it first); others (e.g. yallaplay) serve none, only a static-HTML .description block plus twitter:data1/data2 meta tags for location/company — handler falls back to those. No auth required.",
       "source": "learned",
-      "added": "2026-06-07"
+      "added": "2026-06-07",
+      "updated": "2026-08-28"
     },
     {
       "match": "www.mews.com",
@@ -421,6 +405,258 @@
       "note": "iCIMS ATS — schema.org JobPosting JSON-LD embedded on posting page, generic xh handler works",
       "source": "learned",
       "added": "2026-07-21"
+    },
+    {
+      "match": "careers.se.com",
+      "matchType": "host",
+      "handler": "xh",
+      "params": {
+        "headers": {
+          "User-Agent": "xh/0.26.1",
+          "Accept": "application/json, */*;q=0.5"
+        }
+      },
+      "note": "Oracle Taleo-style career site (careers.se.com = Schneider Electric). JSON-LD JobPosting embedded in static HTML, xh GET works, no JS rendering needed. URL pattern: /jobs/{id}?lang={locale}. Multi-location postings list several jobLocation entries; generic handler only picks the first. Akamai-fronted: bot-blocks the default Mozilla-style fetch UA on a plain request; params.headers below overrides to an xh-like UA/Accept which passes.",
+      "source": "learned",
+      "added": "2026-07-23"
+    },
+    {
+      "match": "careers.epam.com",
+      "matchType": "host",
+      "handler": "epam",
+      "params": {},
+      "note": "Contentstack CMS behind Next.js; job record in __NEXT_DATA__ props.pageProps.job",
+      "source": "learned",
+      "added": "2026-07-23"
+    },
+    {
+      "match": "www.emploi-aramisauto.com",
+      "matchType": "host",
+      "handler": "teamtailor",
+      "params": {},
+      "note": "Aramisauto custom domain fronting Teamtailor; JSON-LD JobPosting embedded in page HTML",
+      "source": "learned",
+      "added": "2026-07-23"
+    },
+    {
+      "match": "joinus.canalplus.com",
+      "matchType": "host",
+      "handler": "successfactors_csb",
+      "params": {},
+      "note": "SAP SuccessFactors Career Site Builder (job2web), custom vanity domain; server-rendered data-careersite-propertyid fields",
+      "source": "learned",
+      "added": "2026-07-23"
+    },
+    {
+      "match": "joinus.canalplus.com",
+      "matchType": "host",
+      "handler": "firecrawl",
+      "params": {},
+      "note": "SAP SuccessFactors Career Site Builder (microdata JobPosting, not JSON-LD — the generic 'xh' handler can't parse it without a microdata extractor). Server-rendered plain HTML, so xh GET *does* work manually, but this host has shown a one-off content-mismatch under concurrent load (a raw fetch briefly returned a sibling posting's body while HTTP 200 looked normal; refetching immediately after was consistently correct). Registering as firecrawl (isolated per-call render, matches career5.successfactors.eu precedent) rather than xh to sidestep that risk; Fetch-jd.mjs firecrawl handler leaves location/remoteScope unspecified — fine, the 2b LLM gate reads the prose. URL shape: joinus.canalplus.com/job/{City}-{Contract}-{TITLE}-%28FHX%29/{jobId}.",
+      "source": "learned",
+      "added": "2026-07-23"
+    },
+    {
+      "match": "careers.smartclip.tv",
+      "matchType": "host",
+      "handler": "teamtailor",
+      "params": {},
+      "note": "smartclip Europe GmbH custom domain fronting Teamtailor; JSON-LD JobPosting embedded in page HTML (same pattern as emploi-aramisauto.com)",
+      "source": "learned",
+      "added": "2026-07-24"
+    },
+    {
+      "match": "careers.hexion.com",
+      "matchType": "host",
+      "handler": "successfactors_csb",
+      "params": {},
+      "note": "SAP SuccessFactors Career Site Builder (jobs2web), custom vanity domain; server-rendered data-careersite-propertyid microdata fields, same pattern as joinus.canalplus.com",
+      "source": "learned",
+      "added": "2026-07-31"
+    },
+    {
+      "match": "jobs.siemens.com",
+      "matchType": "host",
+      "handler": "avature",
+      "params": {},
+      "note": "Avature ATS, div-based label/value template (no dl/dt/dd)",
+      "source": "learned",
+      "added": "2026-07-31"
+    },
+    {
+      "match": "careers.blackwall.com",
+      "matchType": "host",
+      "handler": "teamtailor",
+      "params": {},
+      "note": "Teamtailor custom domain (JSON-LD JobPosting present)",
+      "source": "learned",
+      "added": "2026-08-02"
+    },
+    {
+      "match": "careers.celonis.com",
+      "matchType": "host",
+      "handler": "greenhouse",
+      "params": {
+        "org": "celonis",
+        "id_param": "jobId"
+      },
+      "note": "Celonis careers page fronts Greenhouse; ?jobId={id} (sometimes double-encoded as ?jobId={id}%3Fgh_jid%3D{id}) maps directly to boards-api.greenhouse.io/v1/boards/celonis/jobs/{id}",
+      "source": "learned",
+      "added": "2026-08-05"
+    },
+    {
+      "match": "euremotejobs.com",
+      "matchType": "host",
+      "handler": "wpjobmanager",
+      "params": {},
+      "note": "WP Job Manager plugin (wp-json/wp/v2/job-listings?slug=); free WP job board aggregator. Company in meta._company_name, location/remote-scope only signal is job_listing_region-{slug} class in class_list (JD prose usually has none), employment type in job-type-{slug} class. Apply button href is usually a same-host relative SPA route (/{company-slug}/{uuid}/application, 404s on direct GET) — not an external employer ATS redirect; handler notes internal-vs-external in Other Details.",
+      "source": "learned",
+      "added": "2026-08-05"
+    },
+    {
+      "match": "welcometothejungle.com",
+      "matchType": "host",
+      "handler": "wttj",
+      "params": {},
+      "note": "WTTJ public JSON API (no auth): api.welcometothejungle.com/api/v1/organizations/{org}/jobs/{slug}; org+slug parsed from the page URL path. Page itself 403s via Cloudfront regardless of UA -- always hit the API, never xh the HTML.",
+      "source": "learned",
+      "added": "2026-08-05"
+    },
+    {
+      "match": "jobgether.com",
+      "matchType": "host",
+      "handler": "jobgether",
+      "params": {},
+      "note": "Jobgether remote-jobs aggregator: /offer/{id}-{slug} embeds a JobPosting JSON-LD plus a data-offer attribute JSON carrying the resolved employer ATS applyUrl; requires a realistic browser UA (default fetch-jd UA gets 403)",
+      "source": "learned",
+      "added": "2026-08-05"
+    },
+    {
+      "match": "remotive.com",
+      "matchType": "host",
+      "handler": "remotive",
+      "params": {},
+      "note": "Remotive aggregator: JobPosting JSON-LD (realistic browser UA needed, default UA gets HTTP 400) plus a POST /job/application/{id} JSON-RPC call that resolves the actual employer apply URL (never in the HTML). Title wrapped [Hiring] {role} @{company} — stripped. Prose \"📍 Location: ...\" line is authoritative over the applicantLocationRequirements country array. Both /remote-jobs/{cat}/{slug}-{id} and older /remote/jobs/{cat}/{slug}-{id} path shapes resolve to the same posting.",
+      "source": "learned",
+      "added": "2026-08-05"
+    },
+    {
+      "match": "startup.jobs",
+      "matchType": "host",
+      "handler": "startupjobs",
+      "params": {},
+      "note": "Cloudflare-managed-challenge blocks Node's fetch (any UA) but xh passes; page embeds full schema.org JobPosting; no employer ATS — apply is in-house via Turnstile-protected POST",
+      "source": "learned",
+      "added": "2026-08-05"
+    },
+    {
+      "match": "himalayas.app",
+      "matchType": "host",
+      "handler": "himalayas",
+      "params": {},
+      "note": "Himalayas remote-jobs aggregator: rendered page is Cloudflare-challenge-walled (xh/firecrawl both blocked or soft-redirected to the generic /jobs listing), but himalayas.app/jobs/api/search?company={org}&page={n} is a free unauthenticated JSON API (docs at himalayas.app/api) that returns the same job by guid == the page URL. No employer ATS URL is ever exposed (Apply routes through Himalayas's own signup funnel), so the Himalayas URL stays canonical; not found in the company's search results means expired. Built-in match() fires on the host pattern so no registry override needed, but entry kept for documentation.",
+      "source": "learned",
+      "added": "2026-08-05"
+    },
+    {
+      "match": "www.samsara.com",
+      "matchType": "host",
+      "handler": "greenhouse",
+      "params": {
+        "org": "samsara"
+      },
+      "note": "Samsara careers page embeds Greenhouse job (gh_jid=id in query, /company/careers/roles/{id} path)",
+      "source": "learned",
+      "added": "2026-08-12"
+    },
+    {
+      "match": "ipfabric.io",
+      "matchType": "host",
+      "handler": "greenhouse",
+      "params": {
+        "org": "ipfabric"
+      },
+      "note": "careers page embeds Greenhouse job board via ?gh_jid= query param (not /jobs/{id} path)",
+      "source": "learned",
+      "added": "2026-08-12"
+    },
+    {
+      "match": "everstream.ai",
+      "matchType": "host",
+      "handler": "greenhouse",
+      "params": {
+        "org": "everstreamanalytics"
+      },
+      "note": "custom domain fronting Greenhouse; query param gh_jid maps to boards-api.greenhouse.io/v1/boards/everstreamanalytics/jobs/{id}, content field is double-HTML-escaped",
+      "source": "learned",
+      "added": "2026-08-12"
+    },
+    {
+      "match": "careers.sumsub.com",
+      "matchType": "host",
+      "handler": "teamtailor",
+      "params": {},
+      "note": "Sumsub Teamtailor custom domain; full JobPosting JSON-LD embedded, alternate .md link also available",
+      "source": "learned",
+      "added": "2026-08-20"
+    },
+    {
+      "match": "careers.spacelift.io",
+      "matchType": "host",
+      "handler": "teamtailor",
+      "params": {},
+      "note": "custom domain fronting Teamtailor; JSON-LD JobPosting on page",
+      "source": "learned",
+      "added": "2026-08-28"
+    },
+    {
+      "match": "careers.catalystone.com",
+      "matchType": "host",
+      "handler": "teamtailor",
+      "params": {},
+      "note": "CatalystOne Teamtailor custom domain",
+      "source": "learned",
+      "added": "2026-08-28"
+    },
+    {
+      "match": "seranking.com",
+      "matchType": "host",
+      "handler": "greenhouse",
+      "params": {
+        "org": "seranking"
+      },
+      "note": "SE Ranking careers.html embeds Greenhouse board via ?gh_jid={id}; org slug = seranking",
+      "source": "learned",
+      "added": "2026-08-28"
+    },
+    {
+      "match": "jobs.worldline.com",
+      "matchType": "host",
+      "handler": "successfactors_rmk",
+      "params": {},
+      "note": "SAP SuccessFactors Recruiting Marketing (RMK) template — itemprop microdata + .joblayouttoken-label sidebar, distinct from successfactors_csb's data-careersite-propertyid convention",
+      "source": "learned",
+      "added": "2026-08-28"
+    },
+    {
+      "match": "assaabloy.jobs2web.com",
+      "matchType": "host",
+      "handler": "successfactors_csb",
+      "params": {},
+      "note": "SAP SuccessFactors Career Site Builder (jobs2web), actual jobs2web.com platform domain (not a vanity front like joinus.canalplus.com/careers.hexion.com); data-careersite-propertyid fields use 'department' not 'dept' so company resolves via hiringOrganization meta fallback (ASSA ABLOY, no Careers suffix to strip); no joblayouttoken-label sidebar (that's the RMK template, distinct) — plain propBalanced description walk covers the full JD cleanly",
+      "source": "learned",
+      "added": "2026-08-28"
+    },
+    {
+      "match": "uhg.taleo.net",
+      "matchType": "host",
+      "handler": "taleo",
+      "params": {
+        "company": "Optum (UnitedHealth Group)"
+      },
+      "note": "Oracle Taleo classic (jobdetail.ftl); AJAX-rendered fields need firecrawl; role parsed from post-render document.title pattern 'Job Description - {Role} ({ReqID})'",
+      "source": "learned",
+      "added": "2026-08-28"
     }
   ]
 }

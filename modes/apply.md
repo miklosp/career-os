@@ -68,6 +68,26 @@ agent-browser --session-name apply snapshot -i   # interactive-only refs (@eN)
 
 If a previous apply session is somehow still running, `agent-browser close --session-name apply` first to start clean.
 
+## Per-ATS playbook (read this before filling anything)
+
+Every ATS has its own mechanics, and the ones that bite are not discoverable from a snapshot - hidden required fields, ids that break CSS selectors, widgets that ignore `fill`, verification that silently reads the wrong element. `modes/_ats/` holds a playbook per ATS with the selectors and failure symptoms observed on real forms.
+
+Identify the ATS from the form host, then **read the matching file** before your first fill:
+
+| Host pattern | Playbook |
+|---|---|
+| `jobs.ashbyhq.com` | `modes/_ats/ashby.md` |
+| `job-boards.greenhouse.io`, `boards.greenhouse.io`, any `?gh_jid=` iframe | `modes/_ats/greenhouse.md` |
+| `jobs.lever.co` | `modes/_ats/lever.md` |
+| `*.teamtailor.com` | `modes/_ats/teamtailor.md` |
+| `*.recruitee.com` | `modes/_ats/recruitee.md` |
+| `jobs.deel.com` | `modes/_ats/deel.md` |
+| `ycombinator.com/companies/*/jobs/*` | `modes/_ats/yc.md` |
+
+`modes/_ats/README.md` carries the cross-ATS rules that hold everywhere (command syntax, verification discipline, shell traps) - read it too the first time you touch a form in a session.
+
+**No playbook for this host?** Work the form normally, then write what you learned to `modes/_ats/{slug}.md` when the application is submitted, in the same shape as the existing files. That file is the deliverable that makes the next application on that ATS cheap.
+
 ## Rules (both browsers)
 
 - NEVER click the Submit/Send/Apply button. Fill everything, take a final screenshot, hand off to the candidate.
@@ -136,7 +156,7 @@ Classify each question:
 
 ## Step 4 — Generate answers
 
-**Cover letter:** if the form allows one (free-text field or PDF upload), ALWAYS include it. Generate it via `modes/cover-letter.md` for application #NUM — that mode drafts the letter, runs the voice + scrub passes, and renders the PDF (plus a paste-ready `.txt`) with `style/cover-letter.css`. Upload the `.pdf` to an upload field, or paste the `.txt` into a free-text field. Do not draft the letter inline here — `cover-letter.md` is the single source of cover-letter logic.
+**Cover letter:** if the form allows one (free-text field or PDF upload), ALWAYS include it. Generate it via `modes/cover-letter.md` for application #NUM — that mode elicits, drafts the letter, and renders the PDF (plus a paste-ready `.txt`) with `style/cover-letter.css`. Upload the `.pdf` to an upload field, or paste the `.txt` into a free-text field. Do not draft the letter inline here — `cover-letter.md` is the single source of cover-letter logic.
 
 **MANDATORY: every free-text answer goes through the two passes below before it enters the form.** Short factual fields (name, phone, LinkedIn URL, Yes/No, dropdowns) are exempt. Everything the reviewer actually reads — cover notes, "why us", "why you", "tell us about a project", custom long-answer questions — gets both passes. The standards are in-repo; this mode is self-contained and depends on no external skill.
 
@@ -198,6 +218,13 @@ Browser-filled text has no normalizer in its path — apply the `modes/_writing.
 - **cmux path:** no upload command — give the candidate that exact path and ask them to attach it in the visible surface.
 - **agent-browser fallback:** `agent-browser --session-name apply upload @eN "<CV PDF path>"`.
 
+**Proofread the candidate's own edits before Submit.** When the candidate hands back his own rewrite of a letter or a free-text answer, do not treat "as edited by me" as final and clean. His rewrites beat the draft on substance - he replaces the framing with the motivation he actually holds - but they are typed straight into a browser textarea with no normalizer in the path, so they arrive with mechanical errors. On nPlan #2067 an edited letter carried four into a form about to be submitted: `similiar`, "agents that earns the trust", a present-tense overclaim ("the features I shipped ensure a 100 percent renewal rate" - `secberus-b10` only supports "achieving 100% contract renewal rate"), and a curly apostrophe. All four fixes were accepted.
+
+- Read the value back out of the live field via `eval`. Never trust the paste in chat, and never trust screenshots.
+- Check for misspellings, subject-verb agreement, tense drift, and smart quotes / em-dashes (`modes/_writing.md` §5).
+- Check any metric phrasing back against its `[src: id]` evidence - his edits sometimes tighten a claim into a stronger causal assertion than the source supports.
+- Present the errors as a short before/after table naming the issue, then apply on one confirmation. **Fix errors only** - never re-impose your own wording on his voice.
+
 When every field is filled, screenshot the top and bottom of the form to `/tmp/career-apply-screens/{NUM}-*.png` (`cmux browser surface:N screenshot --out <path>` or `agent-browser --session-name apply screenshot`) and present both to the candidate.
 
 **STOP. Never click Submit/Send/Apply.** The candidate reviews and submits.
@@ -211,6 +238,12 @@ When the candidate confirms they submitted (or says they did it themselves):
    - **Form URL** and the date submitted.
    - Each question as a `###` subheading. Place the submitted answer as plain-text paragraphs directly under the heading — NO `> ` blockquote wrapping, NO indentation. The candidate should be able to copy an answer directly into a reused form field without cleanup.
    - A short **Drafting notes** subsection at the end — what voice moves worked (e.g. "led with Botkube not the generic opener"), any phrasing the candidate pushed back on, and which antipatterns the scrub pass caught. This is the future-self handoff; it compounds across applications.
+   If a cover letter went in (paste or PDF), also keep it: copy the letter as
+   actually sent, including the candidate's edits, to
+   `config/cover-letters/{NUM}-{slug}.md` per `modes/cover-letter.md` Step 8.
+   That directory is the only corpus of accepted letters and feeds the next
+   draft.
+
 3. **Tear down the apply browser — agent-browser fallback ONLY.** If this session used agent-browser: `agent-browser close --session-name apply` — MANDATORY, not optional. The session-named cookies stay on disk for the next run; only the Chromium process exits. Skipping this is how processes leak. If the candidate wants to keep the window open to copy something, ask, then close. **If this session used the cmux path: do NOT close anything** — the surface is the candidate's persistent browser. There is no teardown.
 
 Section G is not a nice-to-have. It's the only record of what the candidate *actually* said, separate from the auto-generated draft in Step 4. If the candidate reopens this application six weeks later, or applies to another Ashby form at the same company, Section G is the battle-tested starting point.

@@ -1,14 +1,16 @@
 # Mode: _eval — Lean evaluation (A/B/C/D scored)
 
-Called after `modes/_location-gate.md` returns ALLOW. Reads
-`data/jds/{NUM}-*.md`, the **id-annotated CV**, `config/profile.md`,
-`config/story-bank.md` (source of citable `S0xx` ids), and
-`config/notes.yml` (confirmed `n#` notes from prior tailor sessions).
+Called for each JD the gate allowed. Every input arrives in one
+`node lib/eval-context.mjs <NUM...>` call (see `modes/auto-pipeline.md`):
+the **id-annotated CV**, `config/profile.md`, the story-bank digest
+(source of citable `S0xx` ids — id/title/skills/Result per story, full
+STAR text intentionally omitted), `config/notes.yml` (confirmed `n#`
+notes from prior tailor sessions), `templates/report.example.md`, and the
+JD(s). Do not re-read those files.
 
-Get the id-annotated CV with `node lib/cv-json-to-md.mjs --annotate-ids
---stdout` — it is `config/cv.json` rendered as prose with each bullet's
-stable source id appended, e.g. `- Took the product from 0 to $1M ARR
-[secberus-b1]`. Cite those ids in Block A (see below); they are
+The id-annotated CV is `config/cv.json` rendered as prose with each
+bullet's stable source id appended, e.g. `- Took the product from 0 to
+$1M ARR [secberus-b1]`. Cite those ids in Block A (see below); they are
 load-bearing for CV generation downstream.
 
 Writes `data/reports/{NUM}-{company-slug}-{YYYY-MM-DD}.md` and a TSV row
@@ -22,15 +24,23 @@ which only runs for the roles that come back to the candidate. Score off
 the JD text and the candidate's own files; do not gather anything else.
 
 Narrative style only. No attribute tables, no JD→CV mapping tables, no
-STAR multi-column tables. Prose bullets. See `templates/report.example.md`
-(committed; `data/reports/` is gitignored) for the exact target look and
-feel — header label order and bullet density.
+STAR multi-column tables. Prose bullets. `templates/report.example.md`
+(committed; `data/reports/` is gitignored — included in the eval context)
+shows the exact target look and feel — header label order and bullet
+density.
 
 ## Step 0 — Archetype detection
 
 Classify into one or two archetypes from `config/profile.md` (Target Roles
 & Archetypes). This controls framing in Block B and which CV matches lead
 Block A.
+
+Read the responsibilities, not just the title. A plain "Senior Product
+Manager" / "Head of Product" title is the **UX-Led Product Manager**
+archetype when the JD hands the role design or UX ownership — running
+research and discovery, owning the design system or the experience end to
+end, no separate design lead, or a product whose users are reached through
+craft (design tooling, developer UX). Title-only classification misses these.
 
 ## Report shape
 
@@ -179,7 +189,7 @@ Score / Report / Notes.
 Invariants for this pass:
 
 - **Never invent experience or metrics.** Read them from the id-annotated
-  CV and `config/story-bank.md` at evaluation time; cite the exact CV line
+  CV and the story-bank digest in the eval context; cite the exact CV line
   **and its `[src: <id>]`** when matching (see the Block A guidance above).
 - **Zero WebSearch.** This pass never touches the open web. If something
   can only be known by searching (real comp, layoffs, funding, posting

@@ -20,8 +20,8 @@ Resolve the target before writing anything.
 - **No args**: ask which application — offer the most recent `Evaluated` /
   `Applied` rows from `data/applications.md`, or accept a pasted JD.
 
-Always also read `config/profile.md` (voice, and the `candidate` frontmatter for
-the signature) and `config/story-bank.md`.
+Voice, signature details, stories and the sample letter all arrive through
+`lib/letter-context.mjs` in Step 1.
 
 ## Source discipline (light provenance)
 
@@ -37,55 +37,131 @@ the same as `apply` Step 4: the JD says *what to emphasise*, never supplies a ne
 fact. If the JD asks for something the candidate cannot evidence from the sources
 above, do not claim it — reframe around an adjacent strength.
 
+## What the letter does
+
+Two jobs, in this order:
+
+1. **Pitch what I bring and the evidence for it.** The capability (stated as
+   what I do, not what I did), one story per paragraph that shows it working,
+   and the lesson that story left. The CV rides alongside and already lists
+   the outcomes; the letter never repeats them.
+2. **Show I understood their problem.** One or two sentences that could only
+   be written after reading *their* JD, using their words. **Only if the JD
+   gives enough to be specific.** A generic JD gets no problem line.
+
+`config/cover-letters/` holds every letter the candidate accepted and edited
+(Step 1 hands you the two most recent). They share one pattern; match it:
+
+- **Open with a belief, not a credential.** A flat point of view on the class
+  of problem the role is about ("the hardest design problems have always
+  lived at the seams"; "PM mostly meant turning ambiguous operational
+  problems into something engineering could actually build"). Then what a
+  good leader does about it. Then the JD line that confirms it, which doubles
+  as the problem line and as a compliment stated as an observation ("which
+  shows me good culture", "the part of your JD that made me stop scrolling").
+  An "I'm Miklos, ..." intro line is optional; leadership roles skip it.
+- **One story paragraph, the elicited one.** A second story never gets a
+  paragraph. If it earns a place at all, it is one sentence inside "what I
+  bring" (Mentimeter: "Like taking an LLM support agent for Kubernetes from
+  nothing to a paying pilot"). Two full stories is the CV again.
+- **The story paragraph runs choice → mechanism → outcome clause → tie-back.**
+  The choice is deliberate ("I ran product and design as one function to give
+  a small team velocity and focus"). The mechanism is how it actually worked,
+  in at most two concrete sentences ("one discovery pipeline fed both the
+  roadmap and the design reviews"; "users would change teams and the report
+  kept running under their old permissions"). The outcome is one clause. The
+  tie-back ends the paragraph in their words ("the seat you describe next to
+  the Product and Engineering Directors"; "roughly the category of problem
+  you're hiring for"; "the same problem wearing different clothes").
+- **Lessons over outcomes.** Every experience ends in what it taught or what
+  it now lets me do ("AI inside a live operational loop behaves nothing like
+  AI in a demo"; "that's what allows me to shape what doesn't exist yet").
+  Earlier roles get one sentence each with a lesson, never an outcome list.
+- **One number per letter.** Both samples carry exactly one ($1M ARR).
+- **AI-native angle as accelerator, foundation unchanged.** "Now the loop
+  runs even faster with AI (prototyping, synthesising research, delivering to
+  production) but the foundation remains: solid research, alignment around
+  outcomes, an empowered team."
+- **"What I bring" is one sentence, not a plan.** It opens the last story
+  paragraph or stands on its own; it names the capability and the product it
+  produces. No first-90-days plan, no "I'd like to do it at your scale".
+- **Close flat.** Practicals only if there is something to say (remote,
+  travel, notice period), then `Happy to talk.` No honesty-gap line unless
+  the JD forces it; no closing zinger.
+- **Shape:** 200-300 words (WeMaintain runs long; Mentimeter's 250 is the
+  target), three to five paragraphs of three to five sentences. Sentences may run long and conversational; a fragment ("Like
+  taking an LLM support agent for Kubernetes from nothing to a paying pilot")
+  is fine as an example beat.
+
 ## Step 1 — Load context
 
-- **NUM path:** read the report. Header → company, role, score, archetype.
-  Block A → cited matches. Criteria ledger (bottom of the report) → the
-  employer's screening needs as `[evidenced]`/`[gap]` bullets — the letter's
-  spine. If the report already has a **Section G** (prior apply answers),
-  mine it for phrasing that landed.
-- **Cold path:** read the pasted JD. Pull the company, role, and the three or
-  four needs it leads with.
-- Read `config/cv.json` for the spine of experience and `config/story-bank.md`
-  for STAR+R stories.
+```bash
+node lib/letter-context.mjs {NUM}          # add --stories N for more candidates
+```
 
-## Step 2 — Draft
+One call, one read: report (header, Block A, Criteria, any `### Motivation`
+and Section G), stories ranked by how often the report cites them, the full
+text of the top-ranked stories, the cited CV bullets and notes, the voice
+section of `config/profile.md`, the sample letter, and the JD. Do not read the
+full story bank or CV; if a story you want is not in the output, rerun with
+`--stories`.
 
-**The letter is a teaser, not a case study.** Its job is to start a conversation,
-not to prove everything. Lead with impact and relevancy; implementation detail
-earns its place only when it directly supports one of those two, and gets cut
-otherwise. The worked examples, the earned secrets, the "how I did it" belong in
-the interview — leave the reviewer wanting the call.
+**Cold path** (pasted JD, no NUM): read the JD, `config/story-bank.md`,
+`config/profile.md` and the newest files in `config/cover-letters/`
+yourself. Pick stories by hand.
 
-One page. Structure:
+## Step 2 — Elicit
 
-1. **Greeting** — `Dear Hiring Team,` unless a named hiring manager is known.
-2. **Opening** — a concrete hook: why *this* company and role, referencing
-   something specific and real from the JD. No generic "I am excited to apply."
-3. **Two body paragraphs** — pick the two most important `[evidenced]`
-   Criteria-ledger items (cold path: the JD's two lead needs) and prove each
-   with its cited evidence. One proof or story per paragraph, two headline
-   proofs total — the rest of the ledger stays in reserve for the interview.
-   Lead each on outcome and relevance; keep method only where it backs the
-   impact, and drop the rest. Numbers and named systems over adjectives.
-4. **Close** — confident and forward-looking; an "I'm choosing you" register,
-   not a plea. Point at the conversation, not at a closing zinger.
+If the report already has a `### Motivation` section, reuse it and skip to
+Step 3. Otherwise ask the candidate these three, one message, dictated answers
+are fine:
 
-## Step 3 — Voice pass
+1. **What you bring:** "What do you bring to this team that would make it a
+   mistake for them not to talk to you?" (a capability plus the system it
+   builds, and the product outcome it produces; not a first-90-days plan)
+2. **Story:** "I'd use {top story} as the proof. Right one? And what's the
+   moment in it you'd tell over coffee?" (offer the top one or two from the
+   ranking; the candidate may name another)
+3. **Their problem:** "Is there anything in the JD that tells you what they're
+   actually struggling with, or is it generic?"
 
-Rewrite the draft in the candidate's signature per `config/profile.md` →
-**Voice & Branding** (first person, proof-before-claim, builder's register,
-confident close). Keep the two selected proofs intact; cut anything else the
-draft picked up along the way.
+Append the answers verbatim under `### Motivation` at the bottom of the report
+(cold path: keep in-session). **Never invent any of the three.** No answer to
+question 3 means no problem line.
 
-## Step 4 — Scrub pass
+## Step 3 — Draft
 
-Enforce `modes/_writing.md` §2–§4 on the result: kill corporate-speak and AI-tell
-vocabulary, strip the AI-writing patterns (em-dash / rule-of-three /
-negative-parallelism / vague-attribution / filler), fix passive voice, vary
-sentence structure. Apply the §5 Unicode substitutions by hand (`—`/`–`→`-`,
-smart quotes→straight, `…`→`...`, strip zero-width/nbsp) — nothing in this path
-normalises for you. Finish with the §6 self-check.
+Draft from the dictation. Keep the candidate's sentences and phrasing wherever
+they work; rewrite only what is unclear. Follow the pattern under "What the
+letter does" paragraph by paragraph:
+
+1. **Greeting** — `Hi,` (a named hiring manager if known).
+2. **Belief → what a good leader does → their JD line.** Never the CV's own
+   opening sentence. Swap test: mailable to a competitor unchanged means
+   rewrite.
+3. **Story paragraph** — exactly one, the story elicited in Step 2: choice →
+   mechanism (two sentences max) → outcome clause → tie-back in their words. Frame choices as deliberate,
+   never as a forced hand ("could not afford two heads") or cleanup duty
+   ("nobody else owned it"). Tie back with the skill stated as what I do,
+   never "I recognise this" or "this is familiar".
+4. **What I bring** — one sentence, capability and the product it produces,
+   then at most one sentence of second evidence and the AI-as-accelerator
+   line if the role wants it.
+5. **Practicals if any, then `Happy to talk.`**
+
+Budget: 200-300 words, one number in the whole letter, one story paragraph.
+No sentence of the form "At X I did A, B and C". No paragraph that only lists outcomes. Anything cut stays in
+reserve for the interview.
+
+## Step 4 — Check
+
+Read it once against `modes/_writing.md` §6 and the voice section of
+`config/profile.md`. Then the sample-letter test: put a paragraph next to an
+accepted letter and ask whether the same person wrote both. If the draft is tighter,
+cleaner and more impressive than the sample, it is worse; loosen it.
+
+Plain ASCII punctuation by hand (`—`/`–`→`-`, smart quotes→straight,
+`…`→`...`): nothing in this path normalises for you.
 
 ## Step 5 — Assemble the markdown
 
@@ -95,13 +171,15 @@ Write `output/customized-cvs/{NUM}-{slug}-cover-letter.md` (cold: drop the
 ```markdown
 Dear Hiring Team,
 
-[Opening paragraph.]
+[Belief, what a good leader does, their JD line.]
 
-[Body paragraph.]
+[Story paragraph.]
 
-[Body paragraph.]
+[What I bring, with its evidence.]
 
-[Close.]
+[Practicals if any.]
+
+Happy to talk.
 
 ---
 
@@ -136,13 +214,23 @@ uv run render-cv-pdf.py \
 emits a `.txt` sibling automatically — the paste-ready text for free-text form
 fields; do not pass `--no-txt`. Do **not** pass `--target-pages` (its
 bullet-trimming is CV-specific). The command prints the page count: if it is over
-one page, tighten the prose in Steps 2–4 and re-render until it fits.
+one page, tighten the prose in Step 3 and re-render until it fits.
 
 ## Step 7 — Hand off
 
 Report the three paths: `.pdf` (upload), `.txt` (paste), `.md` (source). Show the
 letter text in chat as plain paragraphs — no blockquote, no code fence — so the
 candidate can read and copy it directly.
+
+## Step 8 — Keep the accepted letter
+
+The candidate edits the `.md` (or the pasted text) before it goes out. Once
+they call it final, or `apply` submits it, copy the letter as sent to
+`config/cover-letters/{NUM}-{slug}.md`: a `# {Company} — {Role} ({date})`
+heading, one line on what the letter shows (role type, shape), then the body
+from the greeting to `Happy to talk.`, no signature block. That directory is
+the only corpus of accepted letters; Step 1 feeds the newest ones back as the
+bar for the next draft. Never store a draft the candidate has not accepted.
 
 ## Called from `apply`
 

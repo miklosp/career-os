@@ -2,7 +2,7 @@
 
 Single source of truth for turning a job URL into a numbered file under `data/jds/`. Called by `modes/auto-pipeline.md` and by `scan.mjs`. Always dispatch as a background agent.
 
-> **This mode is the fallback, not the front door.** `node lib/fetch-jd.mjs "{url}"` already does Steps 1–5 deterministically and zero-token for every known ATS (Lever, Greenhouse, Ashby, Teamtailor, Personio, Workday CXS, Rippling, LinkedIn) plus any host in the learned registry. The orchestrator runs it first (see `auto-pipeline.md` Step 1). You only land here when the helper returned `unknown-host` or `error`. Your job then: resolve the structured source by hand using the priority methods below, save the JD, and **teach the registry** (see "Learning loop") so the next time it's zero-token.
+> **This mode is the fallback, not the front door.** `node lib/fetch-jd.mjs "{url}"` already does Steps 1–5 deterministically and zero-token for every known ATS (Lever, Greenhouse, Ashby, Teamtailor, Personio, Workday CXS, Rippling, LinkedIn) plus any host in the learned registry. The auto-pipeline prep (`lib/prep-jds.mjs`) runs it first (see `auto-pipeline.md` Phase 1). You only land here when the helper returned `unknown-host` or `error`. Your job then: resolve the structured source by hand using the priority methods below, save the JD, and **teach the registry** (see "Learning loop") so the next time it's zero-token.
 
 > **Ban list.** A banned company (`config/portals.yml` → `banned_companies`) is caught by `fetch-jd.mjs` Guard A *before* `unknown-host` is ever emitted, so a banned URL never reaches this mode. If you nonetheless discover mid-resolution that the employer is on the ban list, **stop immediately** — write no JD, no row — and report `banned`. Never spend a Firecrawl/agent-browser/Playwright call on a banned company.
 
@@ -22,7 +22,7 @@ A job posting URL (LinkedIn, Greenhouse, Lever, Ashby, company careers page, agg
    If `$match` is non-empty, the JD already exists. The next decision depends on its evaluation status — read the row in `data/applications.md` whose `#` column equals the leading 3-digit NUM of `$match`:
 
    - **Status `Evaluated` / `Applied` / `Responded` / `Interview` / `Offer` / `Rejected` / `Discarded` / `Skipped-Location` / `SKIP`** → stop silently. Already handled.
-   - **Status `Fetched`** → the JD was prefetched (typically by `lib/scan-linkedin.mjs` during `scan.mjs`). The fetch work is already done; **skip Steps 2–5 and proceed to Step 6 (Hand off)** so the orchestrator runs `_location-gate.md` then `_eval.md` against the existing JD. Do NOT re-fetch — that would burn Apify/Firecrawl credits for content already on disk.
+   - **Status `Fetched`** → the JD was prefetched (typically by `lib/scan-linkedin.mjs` during `scan.mjs`). The fetch work is already done; **skip Steps 2–5 and proceed to Step 6 (Hand off)** so the orchestrator runs `_location-gate.md` then `_eval.md` against the existing JD. Do NOT re-fetch — that would burn Firecrawl credits and LinkedIn request budget for content already on disk.
    - **No matching row in `applications.md`** → the JD file is orphaned (race or manual edit). Treat as if dedup didn't hit and continue with Steps 2–5 to populate the row, but reuse the existing NUM and JD path instead of reserving a new one.
 
    **`data/applications.md` is NOT a URL dedup source — it has no URL column. The `**URL:**` line in each `data/jds/*.md` file is the canonical URL store.** The status column in `applications.md` is what differentiates "already fetched, awaiting evaluation" from "fully handled."
@@ -67,7 +67,7 @@ silently — log which worked in the saved JD header.
 
 | Priority | Tool | Handles | Notes |
 |----------|------|---------|-------|
-| 1 | **ATS API** (`xh` GET/POST JSON) | Lever / Greenhouse / Ashby / Personio / Workday CXS / **LinkedIn (via Apify actor)** — see table below | Free or near-free, structured, fastest. Always try first if the URL host maps to a known ATS pattern. The LinkedIn row resolves the LinkedIn → employer ATS redirect server-side, so a `linkedin.com/jobs/view/{id}` URL becomes a real ATS URL plus a full JD payload in one round-trip. |
+| 1 | **ATS API** (`xh` GET/POST JSON) | Lever / Greenhouse / Ashby / Personio / Workday CXS / **LinkedIn (via the built-in Voyager handler)** — see table below | Free or near-free, structured, fastest. Always try first if the URL host maps to a known ATS pattern. The LinkedIn row resolves the LinkedIn → employer ATS redirect, so a `linkedin.com/jobs/view/{id}` URL becomes a real ATS URL plus a full JD payload in one round-trip. |
 | 2 | **`xh`** | Static HTML aggregators + Teamtailor (JSON-LD) | Free, no JS. Works on startup.jobs, remotive, welcometothejungle, **Teamtailor** (full job in embedded JSON-LD). SPAs that return shells — escalate. |
 | 3 | **Firecrawl `scrape`** | JS-rendered SPAs (Alva, Tally, Greenhouse SPAs, custom careers pages) | Paid credits but isolated per-call. **Default for SPA fetches.** Requires `FIRECRAWL_API_KEY` in `.env`. Does NOT work on LinkedIn. See "Firecrawl scrape" below. |
 | 4 | **Authenticated agent-browser session** (`--session-name himalayas`, ephemeral) | Cloudflare-walled hosts only (himalayas.app, some company careers where Firecrawl 403s) | Spawns a per-call Chromium that loads cookies from the named session on disk and saves any updates back. Closes when done. No shared port, no persistent process, no cross-agent contamination. See "Authenticated agent-browser session" below. |
@@ -89,8 +89,9 @@ Single-posting endpoints return the full description HTML plus location:
 | `{tenant}.wd{N}.myworkdayjobs.com/{site}/job/{path}/{slug}_{id}` | `xh GET https://{tenant}.wd{N}.myworkdayjobs.com/wday/cxs/{tenant}/{site}/job/{path}/{slug}_{id}` | `.jobPostingInfo.title`, `.jobPostingInfo.jobDescription` (HTML), `.jobPostingInfo.location`, `.jobPostingInfo.additionalLocations[]`, `.jobPostingInfo.timeType`, `.jobPostingInfo.startDate`, `.jobPostingInfo.endDate`, `.jobPostingInfo.externalUrl`, `.jobPostingInfo.canApply`, `.jobPostingInfo.jobReqId`, `.hiringOrganization.name`. No auth. Workday hosts a public CXS REST endpoint that mirrors any browser-facing job URL — always try this BEFORE rendering the SPA in a browser. |
 | `ats.rippling.com/{tenant}/jobs/{uuid}` | `xh --print=hb GET "{url}" -o /tmp/r.html` then extract embedded `__NEXT_DATA__`: `python3 -c "import re,json,sys; h=open('/tmp/r.html').read(); m=re.search(r'<script id=\"__NEXT_DATA__\"[^>]*>(.*?)</script>', h, re.DOTALL); print(json.dumps(json.loads(m.group(1))['props']['pageProps']['apiData']))"` | Rippling ATS (Next.js SPA, Cloudflare-fronted) embeds full payload in `__NEXT_DATA__`. `apiData` keys: `jobBoard`, **`jobPost`** (`name`, `description.role` HTML, `description.company` HTML, `createdOn`, `employmentType`, `companyName`, `url`, `activeJobApplication`), **`workLocations`** (array of human-readable strings like "Remote (Stockholm, Stockholm County, SE)"), `department`, `payRangeDetails`. No auth. The HTML body is the SPA shell — `xh` alone won't show the JD; you MUST parse `__NEXT_DATA__`. Cheaper than Firecrawl since `xh` works (just need to follow up with JSON extraction). |
 | `{tenant}.bamboohr.com/careers/{id}` | `xh GET "https://{tenant}.bamboohr.com/careers/list" Accept:application/json` for the job listing, then `xh GET "https://{tenant}.bamboohr.com/careers/{id}/detail" Accept:application/json` for the full JD. The `/careers/list` endpoint returns a JSON array with `id`, `jobOpeningName`, `atsLocation` (city/country), `isRemote`, and `locationType` for every active posting at that tenant. The `/careers/{id}/detail` endpoint returns `jobOpening.jobOpeningName`, `jobOpening.description` (HTML), `jobOpening.datePosted`, `jobOpening.employmentStatusLabel`, `jobOpening.atsLocation` (structured), `jobOpening.compensation` (may be null), plus `formFields.customQuestions` (application form). No auth required. Tenant = first subdomain segment (e.g. `virtuozzo` from `virtuozzo.bamboohr.com`). Set `**Fetch-method:** ats-api (bamboohr /careers/list + /careers/{id}/detail)`. **Note:** BambooHR does not have a built-in handler in `fetch-jd.mjs` yet — fetch this manually via xh and persist the result. |
+| `{tenant}.applytojob.com/apply/{id}/{slug}` (JazzHR, formerly TheResumator) | `xh GET "{url}"` — server-rendered HTML, no JS needed. Handled by the built-in `jazzhr` handler (generic `*.applytojob.com` host match, no registry entry needed). | No public JSON/XML feed and no JobPosting JSON-LD — only an `Organization` block (`.name` = company). Fixed page template across every tenant: role title in the single page `<h2>`, Location/Type/Experience chips in `.job-attributes-container` (`<div title="Location\|Type\|Experience">`), full JD body in one `id="job-description"` div (customer rich text, no nested `<div>`s). No posting date anywhere on the page. Set `**Fetch-method:** xh`. |
 | `career2.successfactors.eu/career?career_ns=job_listing&company={tenant}&career_job_req_id={id}` (SAP SuccessFactors EU hosted) | **Firecrawl** (Priority 3 — SPA, no public API). `set -a; source .env; set +a && firecrawl scrape "{url}" -o /tmp/fc-{NUM}.md`. The page is a JavaScript SPA that renders the full JD body including structured metadata row (Requisition ID, posted date, location, department, employment type, country) plus responsibilities, requirements, and apply CTA. `xh` returns an HTML shell with `Loading...` — do not use. Set `**Fetch-method:** firecrawl`. Key fields to parse from the Firecrawl markdown: the structured metadata line (e.g. `Requisition ID **8489** - Posted **03/06/2026** - **Barcelona** - **Sales, Marketing & Product Management** - **Permanent** - **Fulltime** - **Spain**`) gives location, posting date, department, and contract type. Note: `#LI-Remote` hashtags in SuccessFactors JDs may be present even for onsite/hybrid roles — treat them as soft signals only; the structured metadata row and JD body prose are authoritative for the `**Remote scope:**` header. |
-| `linkedin.com/jobs/view/{id}` (or `/jobs/collections/.../?currentJobId={id}` or any LinkedIn URL where the job ID can be extracted) | `xh POST "https://api.apify.com/v2/acts/apimaestro~linkedin-job-detail/run-sync-get-dataset-items?token=$APIFY_API_TOKEN"` with payload `{"job_id":["{id}"]}` (array — supports batched IDs) | Three nested objects per record: **`job_info`**: `title`, `description`, `location`, `country_code`, `is_remote_allowed`, `workplace_types[]` (`ONSITE`/`HYBRID`/`REMOTE`), `listed_at` + `expire_at` (ISO), `job_state` (`LISTED`/`CLOSED`), `industries[]`, `job_functions[]`, `experience_level`, `employment_status`, `job_url` (canonical LinkedIn URL), `is_reposted`. **`company_info`**: `name`, `universal_name`, `description`, `staff_count`, `industries[]`, `headquarters` (structured address), `url`, `logo_url`. **`apply_details`**: **`application_url` (the EMPLOYER ATS URL — write THIS as the canonical `**URL:**` in the saved JD; fall back to the LinkedIn URL only when `application_url` is null AND `is_easy_apply` is true, since easy-apply jobs only exist on LinkedIn)**, `is_easy_apply`, `total_applies`, `total_views`. Token in `.env`; source it first via `set -a; source .env; set +a`. Costs Apify credits (~$0.005/job at the time of writing). |
+| `linkedin.com/jobs/view/{id}` (or `/jobs/collections/.../?currentJobId={id}` or any LinkedIn URL where the job ID can be extracted) | **Built into `lib/fetch-jd.mjs`** — no manual call. It routes LinkedIn URLs through `lib/li-voyager.mjs` (`fetchJobPosting` + `parseJobPosting`), the free authenticated Voyager REST endpoint. | Requires `LINKEDIN_LI_AT` and `LINKEDIN_JSESSIONID` (including the `ajax:` prefix) in `.env`; a pasted LinkedIn URL has no free JD source without them, so the handler errors with an actionable message when they are missing. HTTP 401/403 means the cookies expired - re-grab BOTH. The parsed record carries `job_info` (`title`, `description`, `location`, `workplace_types[]`, `listed_at`, `expire_at`, `job_state`, `job_url`), `company_info` (`name`, `description`) and `apply_details` (**`application_url` - the EMPLOYER ATS URL, written as the canonical `**URL:**`; falls back to the LinkedIn URL only for easy-apply**, `is_easy_apply`, `total_applies`). Free, but the endpoint is reverse-engineered and violates LinkedIn's ToS - run serially at modest volume. |
 
 If `isListed == false` (Ashby) or HTTP 404 (Lever/Greenhouse), the posting is genuinely expired. Still save the JD with `**Status:** expired` in the header — the location gate and scoring will short-circuit it, but the dashboard keeps the trail.
 
@@ -98,20 +99,26 @@ For the LinkedIn endpoint, `job_state != "LISTED"` means closed/expired. `expire
 
 ### LinkedIn → employer ATS resolution
 
-LinkedIn is a discovery index, not a JD source (with the exception of Easy Apply). Use Apify `apimaestro~linkedin-job-detail` actor (row above) to get canonical employer ATS URL:
+LinkedIn is a discovery index, not a JD source (with the exception of Easy Apply). Resolution to the employer ATS URL is **handled inside `lib/fetch-jd.mjs`** via `lib/li-voyager.mjs` - you do not call anything by hand. Paste the LinkedIn URL and the handler does the rest.
 
-1. Extract the LinkedIn job ID. Common URL shapes:
+What it does, so you can reason about its output:
+
+1. Extracts the LinkedIn job ID. Common URL shapes:
    - `linkedin.com/jobs/view/{id}` — `id` is the path segment.
    - `linkedin.com/jobs/collections/recommended/?currentJobId={id}` — `id` is in the query string.
    - Search-result cards: same `currentJobId={id}` pattern.
 
-2. Call the actor with `{"job_id":["{id}"]}`.
+2. Calls the authenticated Voyager `jobPostings/{id}` endpoint and parses the apply method.
 
-3. Read `apply_details.application_url` from the response. **That is the canonical employer ATS URL** — save it as the `**URL:**` line in the JD.
+3. An **offsite** apply method yields the canonical employer ATS URL, already cleaned (tracking params and apply suffixes stripped, identity params like `folderId` / `gh_jid` kept). That is what lands on the `**URL:**` line.
 
-4. **Easy-apply fallback.** When `application_url` is null and `is_easy_apply` is true, the role is LinkedIn-only — there is no employer ATS URL. Save `https://www.linkedin.com/jobs/view/{id}` as the canonical URL in that case. URL-dedup downstream still works (the LinkedIn URL IS the canonical URL for these). For any other case where `application_url` is set, never substitute the LinkedIn URL.
+4. **Easy-apply fallback.** When the role is LinkedIn-only there is no employer ATS URL, so `https://www.linkedin.com/jobs/view/{id}` becomes the canonical URL. URL-dedup downstream still works.
 
-`apimaestro~linkedin-job-detail` bills against the shared `APIFY_API_TOKEN` quota. If endpoint fails, check usage with `xh GET "https://api.apify.com/v2/users/me?token=$APIFY_API_TOKEN" | jq '.data.usageCycle'`. Stop and warn the user if shows insufficient credits.
+Auth lives in `.env` as `LINKEDIN_LI_AT` + `LINKEDIN_JSESSIONID`. Never pass either into a subagent prompt. Without them the handler stops with an actionable error rather than falling back - the honest options at that point are to paste the employer ATS URL directly, or set the cookies.
+
+`job_state != "LISTED"` means closed or expired; Voyager still returns HTTP 200 with full data for those, and the handler flags them so the JD is saved with `**Status:** expired` instead of entering the pipeline as live.
+
+Four unauthenticated alternatives - JobSpy, browser-use cloud CDP, ever-jobs and Bright Data - were tested and cannot cross LinkedIn's auth wall. Do not re-test them. See `modes/_scan-sources.md`.
 
 ### Firecrawl scrape (preferred SPA fallback)
 
@@ -174,7 +181,7 @@ agent-browser skills get core
 Use this path specifically for:
 
 - **Cloudflare-walled hosts** (himalayas.app, some company careers) where `xh` / WebFetch / Firecrawl 403.
-- LinkedIn is NOT in this list — use the Apify `linkedin-job-detail` actor instead (see "LinkedIn → employer ATS resolution" above).
+- LinkedIn is NOT in this list — `lib/fetch-jd.mjs` routes it through the built-in Voyager handler (see "LinkedIn → employer ATS resolution" above).
 - Human pacing on auth-walled hosts: 3–5s between navigations, 2s+ hydration. Velocity triggers bot detection on Cloudflare too.
 
 ### Fresh Playwright (last-resort SPA fallback)
@@ -235,7 +242,7 @@ Schema (the location gate depends on these header fields — fill them all; if t
 
 **URL:** {canonical employer ATS URL; the LinkedIn URL only for easy-apply roles with no employer URL — see Step 3.4}
 **Fetched:** {YYYY-MM-DD}
-**Fetch-method:** {ats-api | apify-linkedin | xh | firecrawl | agent-browser-session | playwright-fresh-context}
+**Fetch-method:** {ats-api | voyager-linkedin | xh | firecrawl | agent-browser-session | playwright-fresh-context}
 **Posting age:** {X days ago | unspecified}
 **Status:** {active | expired}
 
@@ -284,8 +291,8 @@ consistent across `data/jds/`, `applications.md`, and `data/reports/`.
 
 ## Step 6 — Hand off
 
-Return the `NUM` and `data/jds/{NUM}-...md` path to the caller. The orchestrator
-(`modes/auto-pipeline.md`) will invoke `modes/_location-gate.md` next.
+Return the `NUM` and `data/jds/{NUM}-...md` path to the caller. The solo-agent
+flow (`modes/auto-pipeline.md`) continues with the location gate next.
 
 ## Failure handling
 

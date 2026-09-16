@@ -284,6 +284,9 @@ Action: bank is healthy. No action needed.
 
 ## Rules
 
+- **The bank stays small: 5-8 deeply-curated stories, never one per application.** Each story must hold up under interviewer challenge. A bank of 22 weak stories with overlapping or fabricated angles is worse than 6 strong ones - interview answers degrade to the weakest claim, and false-promise stories get caught at reference checks.
+- **In `review`, every story is deletable, not just fill-in-able.** Surface duplicates and false-promise stories for the candidate to prune. Pruning is part of the job, not an exception to it.
+- **Never auto-add on a gap.** When `interview-prep` hits a question no story covers, propose extending an existing story's **Best For** first. Add a new entry only when the underlying experience is genuinely new.
 - **Never write to `config/story-bank.md` without explicit candidate approval.** A field is written only after the candidate selects **Approve** on its confirmation panel.
 - **Never invent earned secrets.** If the candidate's input doesn't contain a real insight, leave Earned Secret as `—` and move on.
 - **STAR+R body and heading are immutable in `review`.** Only header-block fields change.

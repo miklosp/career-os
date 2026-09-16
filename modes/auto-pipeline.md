@@ -6,83 +6,103 @@ it.
 
 ## Input
 
-One or more URLs. If multiple URLs: fan out.
+One or more URLs (pasted by the user, or scan's `DISPATCH_URLS`).
 
-## Orchestration
+## Phase 1 — Prep: fetch + deterministic gate (inline, zero tokens)
 
-For **each** URL the user supplied, dispatch one background agent in parallel,
-with `model: "sonnet"` (scoring quality is fine on Sonnet, and Sonnet keeps
-the agent baseline cheap). Bound concurrency to **≤ 3** active agents — keeps
-target-site rate limits healthy and stays under the Apify account-level
-parallel-run cap. Larger lists: queue the rest and run them as earlier agents
-finish.
-
-Each agent runs gate → score **inline**. Fetch is a zero-token Node
-helper first, with the LLM `_fetch.md` path only as a fallback.
-
-### Per-agent flow
-
-#### Step 1 — Fetch (zero-token helper first; do this BEFORE loading any mode files)
-
-Run the deterministic helper. It does dedup, NUM reservation, the
-structured fetch, the JD file write, and the `applications.md` row in one
-call — no Claude tokens, no `modes/_fetch.md` load:
+Run in the current session — no agent, no mode-file loads:
 
 ```bash
-node lib/fetch-jd.mjs "{url}"
+node lib/prep-jds.mjs <url...>
 ```
 
-It emits exactly one JSON line. Branch on `status`:
+It runs `lib/fetch-jd.mjs` on every URL (dedup, ban list, NUM reservation,
+JD file write, `Fetched` row) and `lib/location-gate.mjs` on every fetched
+NUM, then emits one JSON line. Buckets:
 
-- **`ok`** — JD written. Use the returned `num` / `path`. Go to Step 2.
-- **`expired`** — JD written with `Status: expired`. Go to Step 2 (the
-  gate / scoring short-circuit it, but the trail is kept).
-- **`exists`** — dedup hit. The helper also returns `appStatus`:
-  - `Fetched` → fetch already done, not yet scored. Go to Step 2 with the
-    returned `num` / `path`.
-  - `Evaluated` / `Applied` / `Skipped-Location` / `SKIP` / any terminal
-    state → already handled. Stop silently.
-  - `appStatus` null (orphaned JD, no row) → re-register only: append the
-    `Fetched` row for the returned `num` (see `_fetch.md` Step 5), then
-    Step 2.
-- **`banned`** — the company is on the `banned_companies` list in
-  `config/portals.yml`. The helper wrote nothing (no JD, no row) and logged
-  the URL in `scan-history.db` as `status='banned'`. **Stop silently.** Do
-  NOT load `_fetch.md`, do NOT create a row, do NOT score. Zero further
-  spend — that is the entire point of the ban list.
-- **`unknown-host`** or **`error`** — only now load `modes/_fetch.md` and
-  follow it as the fallback. **After** a
-  successful manual resolve of a *new structured source*, teach the
-  registry so the next hit is zero-token — see `_fetch.md` "Learning loop".
+- **`ready`** — `[{num, path, gate: "allow"|"needs-llm"}]` → Phase 2.
+- **`skipped`** — deterministic gate SKIPs (geography, or JD language
+  outside `jd_languages`); `Skipped-Location` rows already written.
+  Nothing to do.
+- **`expired`** — JD + row kept as trail; never scored. Mention in the
+  wrap-up.
+- **`evaluated`** — report already on disk, row awaiting the user's
+  `merge-tracker.mjs` run. Not re-scored; remind the user to merge.
+- **`deferred`** — `unknown-host` / `error` / orphaned rows → Phase 3.
+- **`done`** / **`banned`** — counts; already handled / ban-listed. Silent.
 
-Most URLs (any known ATS + LinkedIn + scan-prefetched) resolve at the
-helper and never load `_fetch.md` at all.
+Lists of >10 URLs: run it in the background and surface per-URL progress
+(stderr emits one line per URL).
 
-#### Step 2 — Location gate
+## Phase 2 — Dispatch batched eval agents
 
-Two stages — deterministic first, LLM only when needed.
+Chunk `ready` into groups of **4** in queue order (last group may be
+smaller). One background agent per group, `model: "sonnet"` (scoring
+quality is fine on Sonnet, and Sonnet keeps the batch cheap against the
+rate limit), **≤ 3 concurrent** — queue remaining chunks as agents
+finish. Phase 3 solo agents share the same cap, after the batches.
 
-**2a. Deterministic short-circuit (zero tokens):**
-
-```bash
-node lib/location-gate.mjs {NUM}
+```
+Agent(
+  subagent_type="general-purpose",
+  model="sonnet",
+  prompt="Follow the batch-agent flow in modes/auto-pipeline.md for these
+    JDs: 2279 (gate: needs-llm), 2281 (gate: allow), 2284 (gate: allow).
+    Each JD is an independent, sealed evaluation.",
+  description="career-ops eval batch 2279 2281 2284"
+)
 ```
 
-Exit codes:
-- `0` → ALLOW (proceed to Step 3 — skip 2b, no LLM gate needed)
-- `10` → SKIP applied. The script has already updated the applications.md row to `Skipped-Location` with the rule-id + quoted Location as evidence. **Stop here. No report, no TSV.**
-- `20` → NEEDS_LLM (no deterministic answer — fall through to 2b)
+Path references only — never inline mode-file or JD content into the
+prompt.
 
-The deterministic gate fires on structured `**Remote scope:** onsite:City` / `hybrid:City` headers (LinkedIn Voyager populates these). It does NOT inspect JD body language — that is 2b's job.
+## Phase 3 — Deferred URLs: solo fallback agents
 
-**2b. LLM gate (only on exit 20):**
+One background agent per `deferred` entry (`model: "sonnet"`), following
+the solo-agent flow below. This is the only path that ever loads
+`modes/_fetch.md`.
 
-Follow `modes/_location-gate.md`. If it returns `SKIP:<rule-id>: "<evidence>"`, the gate has already updated the applications.md row to `Skipped-Location` with the quoted evidence in Notes. Stop here. No report, no TSV.
+## Batch-agent flow
 
-#### Step 3 — Score
+The agent never touches the network — every JD in the batch is already on
+disk.
 
-If gate returned `ALLOW`, follow `modes/_eval.md` inline. The eval mode
-lists the exact files to read. Write `data/reports/{NUM}-{slug}-{date}.md`
-and drop a TSV in `data/tracker-additions/`.
+1. **One context call** — everything arrives in a single turn:
 
-#### Step 4 — Stop
+   ```bash
+   node lib/eval-context.mjs <num...>
+   ```
+
+   Emits: id-annotated CV, `config/profile.md`, story-bank digest (S0xx
+   ids stay citable), confirmed notes, `templates/report.example.md`, and
+   every JD in the batch. Do NOT re-Read any of these files.
+2. Read `modes/_eval.md` once — the scoring spec for every JD in the
+   batch.
+3. If any JD is flagged `gate: needs-llm`: Read `modes/_location-gate.md`
+   once, and apply it to each flagged JD **before** scoring it. On SKIP
+   the mode updates the row — no report, no TSV, move to the next JD.
+4. Evaluate the JDs strictly in the given order, **each as a sealed
+   section**:
+   - Score only against that JD. Never compare with, rank against, or
+     reuse reasoning, scores, or `[src:]` citations from other JDs in the
+     batch.
+   - Write the report AND the tracker TSV **in the same turn** (two Write
+     calls in one response), then move to the next JD.
+5. Finish with one line per NUM: `{num} {company} — {score}/5` (or
+   `skipped-location`). Never run `merge-tracker.mjs` /
+   `dedup-tracker.mjs`.
+
+## Solo-agent flow (deferred URLs only)
+
+1. **Fetch** — `node lib/fetch-jd.mjs "{url}"`, branch on `status`:
+   - `unknown-host` / `error` — load `modes/_fetch.md` and follow it.
+     After a successful resolve of a *new structured source*, teach the
+     registry (`--learn`) so the next hit is zero-token.
+   - `exists` with `appStatus` null (orphaned JD) — re-register only:
+     append the `Fetched` row for the returned `num` (see `_fetch.md`
+     Step 5).
+   - `banned`, or `exists` in a terminal state — stop silently.
+2. **Gate** — `node lib/location-gate.mjs {NUM}`. Exit 10 → stop (row
+   updated). Exit 20 → follow `modes/_location-gate.md`; on SKIP, stop.
+3. **Score** — `node lib/eval-context.mjs {NUM}`, then follow
+   `modes/_eval.md`. Write the report + TSV in the same turn.

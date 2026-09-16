@@ -19,6 +19,12 @@ convention + ats-prompt Rule 4); bullets containing a protected --keywords
 term are trimmed last; a role/sub-role is never left with zero bullets.
 Trimming only removes content; it never adds or rewrites — no fabrication risk.
 
+Malformed fences from the generator (a class with stray words, an unclosed
+opener) are repaired before rendering and the repair is reported on stderr.
+Before anything is written, the rendered PDF's own text is scanned for leaked
+markup (::: fences, [src:] tags, <gaps>/<bridges>, raw divs, ** bold). Any hit
+is a bug, not a style choice: the run fails with exit 1 and writes no files.
+
 Also emits a plain-text sibling (<out>.txt, unless --no-txt) for
 paste-into-form ATS flows, derived from the same markdown.
 """
@@ -49,11 +55,56 @@ PAGE_SIZES = {"a4": "A4", "letter": "letter"}
 def expand_fenced_divs(md_text: str) -> str:
     """Convert Pandoc-style ::: class ::: fenced divs into HTML <div class="...">."""
     return re.sub(
-        r"^::: (\w+)\s*\n(.*?)\n^:::\s*$",
-        r'<div class="\1">\n\2\n</div>',
+        # Content stops at the next line starting with ":::" so an unclosed or
+        # empty div can never swallow the fence that follows it.
+        r"^::: (\w+)[ \t]*\n((?:(?!^:::)[^\n]*\n)*?)^:::[ \t]*$",
+        r'<div class="\1">\n\2</div>',
         md_text,
-        flags=re.MULTILINE | re.DOTALL,
+        flags=re.MULTILINE,
     )
+
+
+def normalize_fences(md_text: str) -> tuple[str, list[str]]:
+    """Repair the two malformed fence shapes the generator produces: a class
+    carrying stray words ("::: development description") and an opening fence
+    that is never closed. Both otherwise reach the page as literal text.
+
+    Returns the repaired markdown and a list of what was changed — repairs are
+    announced, never silent, so a misbehaving generator stays visible.
+    """
+    fixes: list[str] = []
+
+    def _fix_class(m: re.Match) -> str:
+        cls = m.group(1).strip()
+        if re.fullmatch(r"\w+", cls):
+            return m.group(0)
+        fixes.append(f'class "{cls}" -> "description"')
+        return "::: description"
+
+    md_text = re.sub(
+        r"^::: ([ \t\w]*\bdescription)[ \t]*$", _fix_class, md_text, flags=re.MULTILINE
+    )
+
+    # A description block is a single paragraph, so an open fence that reaches a
+    # blank line, a heading, or the next fence was never closed.
+    out: list[str] = []
+    pending: str | None = None
+    for line in md_text.split("\n"):
+        s = line.strip()
+        if pending is not None and (s == "" or s.startswith("#") or s.startswith("::: ")):
+            out.append(":::")
+            fixes.append(f'unclosed "{pending}" -> closed')
+            pending = None
+        if s == ":::":
+            pending = None
+        elif s.startswith("::: "):
+            pending = s
+        out.append(line)
+    if pending is not None:
+        out.append(":::")
+        fixes.append(f'unclosed "{pending}" -> closed at end of document')
+
+    return "\n".join(out), fixes
 
 
 def render_bytes(md_text: str, css_path: Path | None, page_size: str, base_url: str) -> bytes:
@@ -79,6 +130,34 @@ def page_count(pdf_bytes: bytes) -> int:
     import io
 
     return len(PdfReader(io.BytesIO(pdf_bytes)).pages)
+
+
+# Markup that must never survive into a rendered page. The citation validator
+# reads markdown and the fact-check reviewers read prose, so neither sees syntax
+# that leaked through the markdown→HTML step. This is the last gate before a
+# document reaches a human.
+MARKUP_LEAKS = [
+    (re.compile(r":::"), "fenced-div marker"),
+    (re.compile(r"\[src:", re.IGNORECASE), "[src: id] citation tag"),
+    (re.compile(r"</?(?:gaps|bridges)>", re.IGNORECASE), "audit block tag"),
+    (re.compile(r"</?div\b", re.IGNORECASE), "raw HTML div"),
+    (re.compile(r"\*\*"), "unrendered bold marker"),
+]
+
+
+def find_markup_leaks(pdf_bytes: bytes) -> list[str]:
+    """Report literal markup found in the PDF's extracted text. Empty = clean."""
+    import io
+
+    text = "\n".join(
+        page.extract_text() or "" for page in PdfReader(io.BytesIO(pdf_bytes)).pages
+    )
+    found = []
+    for pattern, name in MARKUP_LEAKS:
+        hit = next((ln for ln in text.split("\n") if pattern.search(ln)), None)
+        if hit is not None:
+            found.append(f"{name} → {hit.strip()[:120]}")
+    return found
 
 
 def _bullet_protected(line: str, keywords: list[str]) -> bool:
@@ -188,6 +267,9 @@ def main() -> None:
 
     pdf_path.parent.mkdir(parents=True, exist_ok=True)
     md_text = md_path.read_text(encoding="utf-8")
+    md_text, fence_fixes = normalize_fences(md_text)
+    for fix in fence_fixes:
+        print(f"\u26a0 Fence repaired \u2014 {fix}", file=sys.stderr)
     base_url = str(md_path.parent)
 
     pdf = render_bytes(md_text, css_path, page_size, base_url)
@@ -207,6 +289,14 @@ def main() -> None:
             trimmed += 1
             guard += 1
             pdf = render_bytes(md_text, css_path, page_size, base_url)
+
+    leaks = find_markup_leaks(pdf)
+    if leaks:
+        print("\u274c Markup leaked into the rendered page \u2014 nothing written.", file=sys.stderr)
+        for leak in leaks:
+            print(f"   {leak}", file=sys.stderr)
+        print(f"   Fix the source markdown: {md_path}", file=sys.stderr)
+        sys.exit(1)
 
     pdf_path.write_bytes(pdf)
     size_kb = pdf_path.stat().st_size / 1024

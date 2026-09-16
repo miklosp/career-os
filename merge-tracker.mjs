@@ -274,6 +274,7 @@ if (!existsSync(APPS_FILE)) {
 const appContent = readFileSync(APPS_FILE, "utf-8");
 const appLines = appContent.split("\n");
 const existingApps = [];
+const takenNums = new Set();
 let maxNum = 0;
 
 for (const line of appLines) {
@@ -285,6 +286,7 @@ for (const line of appLines) {
     const app = parseAppLine(line);
     if (app) {
       existingApps.push(app);
+      takenNums.add(app.num);
       if (app.num > maxNum) maxNum = app.num;
     }
   }
@@ -382,9 +384,12 @@ for (const file of tsvFiles) {
       skipped++;
     }
   } else {
-    // New entry — use the number from the TSV
-    const entryNum = addition.num > maxNum ? addition.num : ++maxNum;
-    if (addition.num > maxNum) maxNum = addition.num;
+    // New entry — keep the NUM the TSV reserved via lib/next-num.mjs, which
+    // already owns the report and any generated CV on disk. Only renumber on a
+    // genuine collision; a number merely lower than maxNum is not a collision.
+    const entryNum = takenNums.has(addition.num) ? ++maxNum : addition.num;
+    takenNums.add(entryNum);
+    if (entryNum > maxNum) maxNum = entryNum;
 
     const newLine = `| ${entryNum} | ${addition.date} | ${sanitizeCell(addition.company)} | ${sanitizeCell(addition.role)} | ${addition.score} | ${addition.status} | ${addition.pdf} | ${addition.report} | ${sanitizeCell(addition.notes)} |`;
     newLines.push(newLine);

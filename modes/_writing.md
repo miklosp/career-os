@@ -6,50 +6,75 @@
      voice/branding lives in config/profile.md → Voice & Branding.
      ============================================================ -->
 
-The complete quality bar for **every piece of generated text that reaches a human reviewer**: CV summaries and bullets, cover letters, application form free-text answers, outbound LinkedIn/email messages.
+The quality bar for **every piece of generated text that reaches a human reviewer**: CV summaries and bullets, cover letters, application form free-text answers, outbound LinkedIn/email messages.
 
 **Out of scope:** internal evaluation reports (`data/reports/*`) and terminal output to the user — working notes, not candidate-facing.
 
 Apply this file together with the candidate's personal voice in `config/profile.md` → **Voice & Branding**. This file is the general craft; that section is the individual signature. When the personal section is silent on something, this file governs.
 
-## 1. Voice
+## 1. What good sounds like
 
-- **Direct and concrete.** No preamble, no throat-clearing, no meta-commentary ("In this answer I will…"). Open on the substance.
-- **Plain, native tech English.** Short sentences. Active voice. Strong verbs. Match the JD's language at generation time (EN default).
-- **Earn every sentence.** If a sentence doesn't add a fact, a reason, or a next step, cut it.
-- **Specific beats impressive.** Numbers, tools, named systems and outcomes over adjectives.
+A person talking to a peer who knows the field. Not a job posting, not a consulting deck, not a model trying to be helpful.
 
-## 2. Hard bans (rewrite on sight)
+- **Lead with the result.** The first sentence answers the question or states the outcome. Context comes after, if at all.
+- **One idea per sentence.** Around twenty words, with a verb. Start a new sentence instead of joining clauses.
+- **Short by leaving things out, not by packing them in.** Pick the one example that proves the point. Everything cut stays in reserve for the interview.
+- **Specific beats impressive.** A named system, a real number, a customer, a moment ("users changed teams and the report kept running under their old permissions") over any adjective.
+- **Say what the work actually was.** The interesting part is usually the problem definition or the call you made, not the feature list.
+- **Opinions stated as opinions.** "This was the wrong bet, in hindsight." Qualify once, not three times.
+- **One moment of honesty** per longer piece: a gap, a call you would revisit, a constraint that shaped the outcome. It reads as credibility.
+- **Vary the rhythm.** A short claim. Then a longer sentence that takes its time with the evidence. Then short again. Never three sentences of the same shape in a row.
+- **Name the actual role.** CISOs, SREs, platform teams, the sales team. Never "stakeholders" or "cross-functional partners".
+- **Name the actual tool** when something technical is in the piece. It is proof of hands-on work.
+- **First person, active voice.** "I decided", "we shipped". "We" for genuinely collaborative work; "I" for calls that were yours. Neither to inflate or to hide.
+- **Plain, native tech English.** Match the JD's language at generation time (EN default).
 
-**Corporate-speak / clichés:**
-"passionate about", "results-oriented", "proven track record", "demonstrated ability to", "best practices" (name the practice), "in today's fast-paced world", "synergies", "robust", "seamless", "cutting-edge", "innovative", "world-class", "game-changer", "best-in-class".
+## 2. Selection
 
-**AI-tell vocabulary:**
-"leveraged" → "used" (or name the tool) · "spearheaded" → "led"/"ran" · "facilitated" → "ran"/"set up" · "delve", "navigate" (figurative), "underscore", "testament to", "tapestry", "landscape" (figurative), "realm", "boasts", "showcase", "elevate", "embark", "foster", "garner", "pivotal", "crucial", "vital" (when decorative).
+Where the text answers a question (form field, cover letter, outbound message), every sentence answers the literal question. Two proofs is the default ceiling unless the question asks for more. A cover letter is not the CV in prose: the CV rides alongside and already carries the outcomes.
 
-## 3. AI-writing patterns to strip
+## 3. Tells to strip
 
-- **Em-dash / en-dash overuse.** Restructure into two sentences or use a comma/colon. (Mechanically backstopped — see §5 — but don't generate them.)
-- **Rule of three.** Not every list needs exactly three items. Use two, or four, or one strong claim. Vary it.
-- **Negative parallelism.** "It's not just X, it's Y" / "This isn't about X — it's about Y." Delete the frame; state Y.
-- **Inflated symbolism / promotional gloss.** "stands as a testament", "plays a vital role", "rich tapestry of", "a beacon of". Cut entirely.
-- **Vague attribution.** "industry experts agree", "studies show", "it is widely regarded". Either cite the specific source or drop the claim.
-- **Superficial -ing wrap-ups.** Trailing "…, highlighting the importance of…", "…, showcasing the ability to…", "…, reflecting a commitment to…". Delete; the fact already carried the point.
-- **Filler openers.** "It's worth noting that", "It is important to remember", "Needless to say", "At the end of the day", "When it comes to".
-- **Passive voice** where an actor exists. "The roadmap was owned by me" → "I owned the roadmap."
-- **Hedging stacks.** "I think this could potentially help to some extent." State the claim or qualify it once, not three times.
+Rewrite on sight. The fix is almost always a plainer sentence, not a synonym.
 
-## 4. Structure
+- **Corporate-speak:** "passionate about", "results-oriented", "proven track record", "demonstrated ability to", "best practices" (name the practice), "fast-paced", "synergies", "robust", "seamless", "cutting-edge", "innovative", "world-class", "best-in-class".
+- **AI vocabulary:** "leveraged" → "used" · "spearheaded" → "led"/"ran" · "facilitated" → "ran"/"set up" · "delve", "navigate" (figurative), "underscore", "testament to", "tapestry", "landscape" (figurative), "realm", "boasts", "showcase", "elevate", "embark", "foster", "garner", "pivotal", "crucial", "vital" (decorative).
+- **Significance inflation:** "marks a pivotal moment", "plays a vital role", "stands as", "setting the stage for". State the fact.
+- **Trailing -ing wrap-ups:** "…, highlighting the importance of", "…, ensuring alignment". The fact already carried the point; delete or make it its own sentence.
+- **Negative parallelism:** "not just X, it's Y". State Y.
+- **Rule of three** when the real number is two or four. Use the real number.
+- **"By doing X, we were able to Y."** → "X gave us Y" or "X worked."
+- **Copula avoidance:** "serves as" → "is", "boasts" → "has".
+- **Synonym cycling:** one concrete noun, repeated, beats "the team… the group… the partners".
+- **Filler openers and fake-depth openers:** "It's worth noting", "At the end of the day", present-tense "The real question is".
+- **Vague attribution:** "studies show", "widely regarded". Cite the source or drop the claim.
+- **Passive voice hiding an actor:** "the roadmap was owned by me" → "I owned the roadmap."
+- **Hedging stacks:** "I think this could potentially help to some extent."
+- **Manufactured closers:** aphorisms and zingers that read as written, not spoken.
+- **Em-dash and en-dash chains.** Two sentences, or a comma. (Mechanically backstopped in §5.)
 
-- Don't start consecutive bullets or sentences with the same word.
-- Mix sentence lengths deliberately: a short claim, then a longer one with the evidence, then short again.
-- Lead with the outcome, then the method. "Cut p95 from 2.1s to 380ms by moving retrieval to pgvector" beats "Worked on performance by exploring vector databases."
-- Name tools, projects, customers, and numbers whenever disclosure allows.
+## 4. Things that are fine
+
+Do not over-correct these:
+
+- Starting a sentence with "And" or "But".
+- One-sentence paragraphs; a fragment for emphasis at the end of a beat ("Every contract renewed.").
+- Admitting something did not work.
+- "We" for collaborative work, especially for Nordic readers, where solo credit-taking reads badly.
+- Repeating a concrete noun.
+- A short concession, "Not fluent, but committed."
+- Naming tools to prove hands-on work.
 
 ## 5. ATS Unicode (enforced in code, not by memory)
 
-Em-dashes, en-dashes, smart quotes, ellipses, zero-width chars and nbsp break Workday/Greenhouse/Lever parsers. `lib/normalize-text.mjs` strips them deterministically at every programmatic write point (`generate-cv-llm.mjs`, `cv-fact-check.mjs`). Treat §3's em-dash rule as a craft preference, not the safety net — the code is the safety net. Where text is filled by an agent into a browser form (no script in the path), apply the substitutions by hand: `—`/`–`→`-`, `"" ''`→`" '`, `…`→`...`, strip zero-width/nbsp.
+Em-dashes, en-dashes, smart quotes, ellipses, zero-width chars and nbsp break Workday/Greenhouse/Lever parsers. `lib/normalize-text.mjs` strips them deterministically at every programmatic write point (`generate-cv-llm.mjs`, `cv-fact-check.mjs`). Where text is filled by an agent into a browser form or written straight to a markdown file (no script in the path), apply the substitutions by hand: `—`/`–`→`-`, `"" ''`→`" '`, `…`→`...`, strip zero-width/nbsp.
 
 ## 6. Self-check before output
 
-Before any candidate-facing text leaves: re-read once against §2–§4, and confirm the personal signature from `config/profile.md` → Voice & Branding is present. Where the text answers a question (form field, cover letter, outbound message), also confirm **selection**: every sentence answers the literal question, and the evidence count stays at the minimum that proves the point — two proofs is the default ceiling unless the question asks for more. This pass is mandatory for everything a reviewer reads; exempt only short factual fields (name, phone, URL, Yes/No, dropdowns).
+Mandatory for everything a reviewer reads; exempt only short factual fields (name, phone, URL, Yes/No, dropdowns).
+
+1. **"What makes this sound AI-generated?"** Answer honestly: name the remaining tells from §3, and the sterile ones too (every sentence the same length, no opinion, no first person, no moment of honesty). Then fix exactly those.
+2. **Read it aloud in your head.** Any sentence awkward to say gets rewritten.
+3. **Selection (§2):** every sentence answers the question; proofs at the minimum that proves the point.
+4. **Signature:** the personal voice from `config/profile.md` is audible. Put a paragraph next to the sample letter or the candidate's own phrasing: would the same person have written both?
+5. **Ends on a signal**, not a trailing observation.

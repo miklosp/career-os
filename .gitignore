@@ -48,3 +48,6 @@ package-lock.json
 
 # Interview transcripts (personal data)
 transcripts/
+
+__pycache__/
+*.pyc

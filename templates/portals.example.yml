@@ -315,62 +315,6 @@ linkedin_searches:
     url: 'https://www.linkedin.com/jobs/search/?keywords=%22Head%20of%20Design%22%20OR%20%22Head%20of%20UX%22%20OR%20%22VP%20Design%22%20OR%20%22Design%20Director%22&location=European%20Union&f_TPR=r604800&f_WT=2'
     enabled: true
 
-# -- Tracked companies --
-# Companies whose career pages are checked directly.
-# scan_method: playwright (default), websearch, greenhouse_api
-# For Greenhouse companies, add api: field for faster structured JSON access.
-
-# Ban list — inverse of tracked_companies. A URL or company matching any
-# enabled entry is dropped at the earliest zero-cost point of every path
-# (fetch front door + all scanners): no JD, no applications.md row, no
-# report, no tokens. Still logged in scan-history.db as status='banned' so
-# it is never re-fetched. Each `match` term is a case-insensitive substring
-# tested against BOTH the raw URL (host AND ATS slug) and the company name;
-# `name` is an implicit match term. Uncomment and edit to use.
-#
-# banned_companies:
-#   - name: Mercor
-#     match:
-#       - mercor.com
-#       - careers-page.com/mercor
-#     enabled: true
-
-# -- hiring.cafe searches (Level 2c) --
-# hiring.cafe federates thousands of employer ATSes via server-rendered
-# search pages (free, no API key, no Apify). searchQuery is a SEMANTIC
-# similarity ranker with a relevance cutoff — NOT boolean, NOT a keyword
-# bag. Narrow exact titles ("VP of Product") often return 0; use a BROAD
-# conceptual phrase per entry to maximise recall and let the global
-# title_filter do the precise include/exclude on parsed titles.
-#   query                — required, broad conceptual role phrase
-#   workplaceTypes       — optional subset of [Remote, Hybrid, Onsite]
-#   dateFetchedPastNDays — optional recency cap (e.g. 14)
-#   searchState          — optional raw passthrough merged last (escape hatch)
-hiringcafe_searches:
-  - name: hiring.cafe — Product leadership (remote, past 14d)
-    query: Product leadership
-    workplaceTypes: [Remote, Hybrid]
-    dateFetchedPastNDays: 14
-    enabled: true
-
-  - name: hiring.cafe — Senior Product Manager (remote, past 14d)
-    query: Senior Product Manager
-    workplaceTypes: [Remote, Hybrid]
-    dateFetchedPastNDays: 14
-    enabled: true
-
-  - name: hiring.cafe — AI Product Manager (remote, past 14d)
-    query: AI Product Manager
-    workplaceTypes: [Remote, Hybrid]
-    dateFetchedPastNDays: 14
-    enabled: true
-
-  - name: hiring.cafe — Design leadership (remote, past 14d)
-    query: Design leadership
-    workplaceTypes: [Remote, Hybrid]
-    dateFetchedPastNDays: 14
-    enabled: true
-
 tracked_companies:
 
   # The scanner auto-detects the ATS from careers_url (no `api:` needed for
