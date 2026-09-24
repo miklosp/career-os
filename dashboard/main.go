@@ -696,13 +696,20 @@ func spawnAgentWorkspace(careerOpsPath, title, launcher, prompt string, app mode
 
 			inner := launcher + " " + shellQuote(prompt)
 			launch := sbPrefix + shell + " -ic " + shellQuote(inner)
-			c := exec.Command(cmuxBin, "new-workspace",
-				"--name", title,
-				"--cwd", careerOpsPath,
-				"--command", launch,
-				"--focus", "true")
-			if err := c.Run(); err == nil {
-				return nil
+			// cmux types --command into the new tab's tty, and the macOS
+			// canonical-mode line buffer (MAX_CANON) drops input past 1024
+			// bytes — the newline never arrives and the tab hangs. The CMUX_*
+			// list alone nears that, so hand cmux a short script invocation.
+			if script, err := writeLaunchScript(launch); err == nil {
+				c := exec.Command(cmuxBin, "new-workspace",
+					"--name", title,
+					"--cwd", careerOpsPath,
+					"--command", "/bin/sh "+shellQuote(script),
+					"--focus", "true")
+				if err := c.Run(); err == nil {
+					return nil
+				}
+				os.Remove(script)
 			}
 			// fall through to host-browser degrade on failure
 		}
@@ -750,6 +757,21 @@ func cmuxReachable() (string, bool) {
 // shellQuote wraps s in POSIX single quotes so it survives as one argument
 // when cmux runs `--command` through a shell. Single quotes inside s are
 // escaped via the standard '\'' idiom.
+// writeLaunchScript writes `launch` to a private temp script that deletes
+// itself before running it, and returns the script path.
+func writeLaunchScript(launch string) (string, error) {
+	f, err := os.CreateTemp("", "career-ops-launch-*.sh")
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	if _, err := f.WriteString("rm -f \"$0\"\n" + launch + "\n"); err != nil {
+		os.Remove(f.Name())
+		return "", err
+	}
+	return f.Name(), nil
+}
+
 func shellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
