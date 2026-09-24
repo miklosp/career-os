@@ -36,7 +36,7 @@
  *                                    -- | recruitee-api | teamtailor-api | join_team-api
  *                                    -- | personio-api | smartrecruiters-api
  *                                    -- | bamboohr-api | breezy-api
- *                                    -- | linkedin-jobspy | remoteineurope | …
+ *                                    -- | linkedin-jobspy | platsbanken | …
  *     title      TEXT,
  *     company    TEXT,
  *     status     TEXT NOT NULL DEFAULT 'added'
@@ -67,9 +67,8 @@ import { resolve } from "path";
 import { pathToFileURL } from "url";
 import yaml from "js-yaml";
 import { runLinkedInScan } from "./lib/scan-linkedin.mjs";
-import { runRemoteInEuropeScan } from "./lib/scan-remoteineurope.mjs";
-import { runWeWorkRemotelyScan } from "./lib/scan-weworkremotely.mjs";
 import { runRemotePmJobsScan } from "./lib/scan-remotepmjobs.mjs";
+import { runPlatsbankenScan } from "./lib/scan-platsbanken.mjs";
 import {
   openScanHistoryDb,
   loadSeenUrls,
@@ -119,7 +118,7 @@ const FETCH_TIMEOUT_MS = 10_000;
 
 // ── API detection ───────────────────────────────────────────────────
 
-function detectApi(company) {
+export function detectApi(company) {
   // 1. Explicit api: field wins — sniff the URL pattern.
   //    Lets custom domains (e.g. careers.britepayments.com/jobs.json) work
   //    without baking another host pattern into the careers_url matcher.
@@ -159,8 +158,8 @@ function detectApi(company) {
     };
   }
 
-  // Greenhouse EU boards
-  const ghEuMatch = url.match(/job-boards(?:\.eu)?\.greenhouse\.io\/([^/?#]+)/);
+  // Greenhouse boards (legacy boards., job-boards., EU job-boards.eu.)
+  const ghEuMatch = url.match(/(?:job-)?boards(?:\.eu)?\.greenhouse\.io\/([^/?#]+)/);
   if (ghEuMatch) {
     return {
       type: "greenhouse",
@@ -694,54 +693,9 @@ async function main() {
     }
   }
 
-  // 5c. remoteineurope.com — sitemap + per-page scrape, free, no Apify.
-  // Discovers jobs the aggregator has surfaced; each page links straight
-  // to the employer's ATS via a clean apply-button. Helper returns the
-  // resolved employer ATS URLs; the auto-pipeline preps + scores those
-  // normally (Greenhouse / Ashby / Workable / etc — all structured).
-  let rieUrls = [];
-  let rieStats = null;
-  try {
-    const result = await runRemoteInEuropeScan({
-      db,
-      portalsCfg: config,
-      dryRun,
-    });
-    rieUrls = result.newUrls;
-    rieStats = result.stats;
-  } catch (err) {
-    errors.push({ company: "remoteineurope.com", error: err.message });
-  }
-
-  // 5e. We Work Remotely — full-text category RSS, free, no Apify. The whole
-  // JD ships in each feed item, so this prefetches data/jds/ + applications.md
-  // rows like the LinkedIn level; dispatched agents skip _fetch.md and run
-  // gate+score only. Canonical URL is the WWR detail page; employer-ATS
-  // resolution defers to apply-time. Driven by weworkremotely_feeds in
-  // portals.yml; the global title_filter does the precise include/exclude.
-  let wwrUrls = [];
-  let wwrStats = null;
-  if (config.weworkremotely_feeds?.length) {
-    const jdsDir = JDS_DIR;
-    mkdirSync(jdsDir, { recursive: true });
-    try {
-      const result = await runWeWorkRemotelyScan({
-        db,
-        portalsCfg: config,
-        applicationsPath: APPLICATIONS_PATH,
-        jdsDir,
-        dryRun,
-      });
-      wwrUrls = result.newUrls;
-      wwrStats = result.stats;
-    } catch (err) {
-      errors.push({ company: "weworkremotely.com", error: err.message });
-    }
-  }
-
   // 5f. Remote PM Jobs — public MCP server (search_jobs/get_job) called as
   // plain JSON-RPC, free, zero LLM tokens. PM-only board. Prefetches the
-  // structured enrichment into data/jds/ + applications.md rows like the WWR
+  // structured enrichment into data/jds/ + applications.md rows like the LinkedIn
   // level; agents skip _fetch.md. Canonical URL is internal (apply-time ATS
   // resolution). Driven by remotepmjobs_searches in portals.yml; the global
   // title_filter does the precise include/exclude.
@@ -763,6 +717,30 @@ async function main() {
       pmStats = result.stats;
     } catch (err) {
       errors.push({ company: "remotepmjobs.com", error: err.message });
+    }
+  }
+
+  // 5g. Platsbanken — Arbetsförmedlingen's JobTech JobSearch API (official
+  // open data, free, no auth). Sweden-only; full JD + employer apply URL per
+  // hit, so JDs are prefetched like the LinkedIn level and agents skip
+  // _fetch.md. Driven by platsbanken_searches in portals.yml.
+  let pbUrls = [];
+  let pbStats = null;
+  if (config.platsbanken_searches?.length) {
+    const jdsDir = JDS_DIR;
+    mkdirSync(jdsDir, { recursive: true });
+    try {
+      const result = await runPlatsbankenScan({
+        db,
+        portalsCfg: config,
+        applicationsPath: APPLICATIONS_PATH,
+        jdsDir,
+        dryRun,
+      });
+      pbUrls = result.newUrls;
+      pbStats = result.stats;
+    } catch (err) {
+      errors.push({ company: "platsbanken (JobTech)", error: err.message });
     }
   }
 
@@ -819,23 +797,6 @@ async function main() {
       );
     }
   }
-  if (rieStats) {
-    console.log(
-      `remoteineurope:        ${rieStats.sitemapJobs} in sitemap, ${rieStats.alreadySeen} already seen, ${rieStats.fetched} fetched, ${rieStats.failed} failed`,
-    );
-    console.log(`  Skipped (title):     ${rieStats.skippedTitle}`);
-    console.log(`  Banned skipped:      ${rieStats.banned ?? 0}`);
-    console.log(`  New dispatchable:    ${rieStats.dispatched}`);
-  }
-  if (wwrStats) {
-    console.log(
-      `weworkremotely:        ${wwrStats.feeds} feeds, ${wwrStats.itemsSeen} items scanned, ${wwrStats.alreadySeen} already seen, ${wwrStats.failed} failed`,
-    );
-    console.log(`  Expired skipped:     ${wwrStats.expired}`);
-    console.log(`  Skipped (title):     ${wwrStats.skippedTitle}`);
-    console.log(`  Banned skipped:      ${wwrStats.banned ?? 0}`);
-    console.log(`  Prefetched JDs:      ${wwrStats.prefetched}`);
-  }
   if (pmStats) {
     console.log(
       `remotepmjobs:          ${pmStats.searches} searches, ${pmStats.candidates} candidates, ${pmStats.alreadySeen} already seen, ${pmStats.failed} failed`,
@@ -846,15 +807,24 @@ async function main() {
     console.log(`  Banned skipped:      ${pmStats.banned ?? 0}`);
     console.log(`  Prefetched JDs:      ${pmStats.prefetched} (${pmStats.atsResolved ?? 0} ATS-resolved)`);
   }
+  if (pbStats) {
+    console.log(
+      `platsbanken:           ${pbStats.searches} searches, ${pbStats.hits} hits, ${pbStats.alreadySeen} already seen, ${pbStats.failed} failed`,
+    );
+    console.log(`  Expired skipped:     ${pbStats.expired}`);
+    console.log(`  Skipped (title):     ${pbStats.skippedTitle}`);
+    console.log(`  Cross-source dupes:  ${pbStats.dupCompanyRole}`);
+    console.log(`  Banned skipped:      ${pbStats.banned ?? 0}`);
+    console.log(`  Prefetched JDs:      ${pbStats.prefetched}`);
+  }
 
   // Backstop: nothing banned reaches DISPATCH_URLS even if an upstream
-  // (LinkedIn/remoteineurope) helper missed it.
+  // (LinkedIn/aggregator) helper missed it.
   const dispatchUrls = [
     ...newOffers.map((o) => o.url),
     ...linkedinUrls,
-    ...rieUrls,
-    ...wwrUrls,
     ...pmUrls,
+    ...pbUrls,
   ].filter((u) => !isBanned({ url: u }));
 
   if (newOffers.length > 0) {
@@ -871,27 +841,19 @@ async function main() {
       console.log(`  + ${url}`);
     }
   }
-  if (rieUrls.length > 0) {
-    console.log(
-      "\nNew offers (remoteineurope.com — resolved employer ATS URLs):",
-    );
-    for (const url of rieUrls) {
-      console.log(`  + ${url}`);
-    }
-  }
-  if (wwrUrls.length > 0) {
-    console.log(
-      "\nNew offers (We Work Remotely — JDs prefetched, agents skip _fetch.md):",
-    );
-    for (const url of wwrUrls) {
-      console.log(`  + ${url}`);
-    }
-  }
   if (pmUrls.length > 0) {
     console.log(
       "\nNew offers (Remote PM Jobs — JDs prefetched, agents skip _fetch.md):",
     );
     for (const url of pmUrls) {
+      console.log(`  + ${url}`);
+    }
+  }
+  if (pbUrls.length > 0) {
+    console.log(
+      "\nNew offers (Platsbanken — JDs prefetched, agents skip _fetch.md):",
+    );
+    for (const url of pbUrls) {
       console.log(`  + ${url}`);
     }
   }

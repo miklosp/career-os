@@ -8,12 +8,12 @@ Where career-ops discovers job offers: which sources are wired in, what each one
 |---|---|---|---|---|
 | ATS APIs (Greenhouse, Ashby, Lever, Recruitee, Teamtailor, join.team, Personio, SmartRecruiters, BambooHR, Breezy) | 1 | `scan.mjs` (inline) | Free | Real-time, exact, employer-first. Driven by `tracked_companies` in `user/config/portals.yml`. |
 | LinkedIn | 2 | `lib/scan-linkedin.mjs` + `lib/scan-jobspy.py` (+ optional `lib/li-voyager.mjs`) | Free | Discovery + full JD text in one pass. JD prefetched, agents skip `modes/_fetch.md`. |
-| remoteineurope.com | 2b | `lib/scan-remoteineurope.mjs` | Free ($0, pure HTTP) | Sitemap + per-page scrape; emits the employer ATS URL. Does NOT prefetch the JD. |
-| We Work Remotely | 2e | `lib/scan-weworkremotely.mjs` | Free | Full-text category RSS; whole JD ships in the feed, so JD is prefetched. |
 | Remote PM Jobs (remotepmjobs.com) | 2f | `lib/scan-remotepmjobs.mjs` | Free | Public MCP server; scan-side geo gate + ATS resolution. PM-only board. |
+| Platsbanken (JobTech JobSearch API) | 2g | `lib/scan-platsbanken.mjs` | Free | Sweden's national job board, official open data. Full JD + employer apply URL per hit; JD prefetched. |
+| startupmap.one | seed | `lib/import-startupmap.mjs` | Free | Not a discovery level: one-off/re-runnable importer that turns startup careers boards into `tracked_companies` entries. |
 | Firecrawl | support | `firecrawl` CLI | ~1 credit/scrape | Not a discovery source: the SPA fetch fallback (`modes/_fetch.md` Priority 3) and the first-choice liveness prober for offer verification. |
 
-Level numbering: integer levels are major source classes (1 = ATS APIs, 2 = LinkedIn). Aggregator scanners are conceptually a sub-pattern of LinkedIn-style discovery (find URLs, dedup, scrape titles), so they sit under Level 2 with a letter suffix. New aggregators follow the same shape: `lib/scan-{site}.mjs`, called from `scan.mjs`, next free letter. `2c` (hiring.cafe) and `2d` (englishjobs.se) are burnt - see "Rejected sources".
+Level numbering: integer levels are major source classes (1 = ATS APIs, 2 = LinkedIn). Aggregator scanners are conceptually a sub-pattern of LinkedIn-style discovery (find URLs, dedup, scrape titles), so they sit under Level 2 with a letter suffix. New aggregators follow the same shape: `lib/scan-{site}.mjs`, called from `scan.mjs`, next free letter. `2b` (remoteineurope.com), `2c` (hiring.cafe), `2d` (englishjobs.se) and `2e` (We Work Remotely) are burnt - see "Rejected sources".
 
 ### Level 1 - tracked-company ATS APIs
 
@@ -70,29 +70,9 @@ Caveats:
 
 **New-ATS pointer.** When a new ATS needs a parser, port one from ever-jobs (`packages/plugins/source-ats-*`, ~38 connectors) or JobSpy before reverse-engineering it - see the learning loop in `modes/_fetch.md`.
 
-### Level 2b - remoteineurope.com
-
-Webflow-hosted aggregator, no native API. `https://remoteineurope.com/sitemap.xml` is the structured entry point; each job page carries `<title>{role} at {company}</title>` and a first `<a class="apply-button" href="...">` whose href is the canonical employer ATS URL.
-
-- **Scan-history key is the source URL** (`https://remoteineurope.com/job/{slug}`), so repeat scans skip seen postings without an HTTP roundtrip.
-- **Deliberately does NOT prefetch the JD body**, unlike LinkedIn and WWR. The aggregator's copy is a stale re-render of the employer's page; the auto-pipeline agent fetches fresh from the resolved URL (typically Greenhouse / Ashby / Workable / Workday - all structured and free).
-- In-run dedup on canonical URLs is required: multiple sitemap entries occasionally point at the same employer page.
-- First real test: 361 sitemap jobs, 343 dropped by `title_filter`, 17 dispatched after canonical dedup. Resolved URLs spanned Greenhouse, Ashby, Workable, and a few custom-domain careers pages.
-- Smoke test: `node lib/scan-remoteineurope.mjs --dry-run` (standalone CLI mode).
-
-### Level 2e - We Work Remotely (integrated 2026-06-08)
-
-Driven by `weworkremotely_feeds` in `user/config/portals.yml` (seeded with Product and Design category `.rss` URLs).
-
-- WWR publishes **full-text** per-category RSS (e.g. `/categories/remote-product-jobs.rss`) - the entire JD ships in each `<item><description>` as entity-encoded HTML. So the JD is prefetched whole into `user/data/jds/` with a `Fetched` row and the dispatched agent skips `modes/_fetch.md` straight to gate plus score.
-- **Passes the employer-identity bar** (unlike englishjobs.se): every item names the company (title prefix `Company: Role`), plus HQ and the employer homepage.
-- **Apply URL is WWR-internal** (`weworkremotely.com/remote-jobs/{slug}`), never the employer ATS. Resolution defers to apply-time, same as LinkedIn without Voyager. The WWR detail page is the canonical URL stored and dispatched.
-- **Category buckets are noisy** - a "product" feed contained sales and engineering roles. The global `title_filter` is what cuts it; do not try to fix this with feed selection.
-- `<expires_at>` gives a deterministic freshness drop.
-
 ### Level 2f - Remote PM Jobs (integrated 2026-06-08)
 
-Driven by `remotepmjobs_searches` in `user/config/portals.yml`. PM-only board - design-leadership roles never appear here, those stay with WWR and LinkedIn.
+Driven by `remotepmjobs_searches` in `user/config/portals.yml`. PM-only board - design-leadership roles never appear here, those stay with LinkedIn and Platsbanken.
 
 remotepmjobs.com exposes a **public, auth-free, CORS-open, stateless MCP server at `https://remotepmjobs.com/api/mcp`** (streamable HTTP). It is called as plain JSON-RPC POST (`tools/call` to `search_jobs` / `get_job` / `list_filters`) - no MCP client library, no session handshake. The server's own `instructions` field explicitly invites programmatic use.
 
@@ -104,6 +84,21 @@ Hard-won gotchas, all tested - do not re-investigate:
 - **Scan-side geo gate (added 2026-06-09).** `get_job`'s structured `enrichment.locationEligibleRegions` (`["us"]` / `["worldwide"]` / `["emea"]`) and `locationEligibleLocales` (ISO codes - a Sweden role lists `"SE"`) are the reliable signal, gated against `user/config/profile.md` `location_policy` so the US/Canada flood is dropped at the source and never fetched, scored, or skipped downstream. A cheap free-text pre-gate on the search-result `geoRestriction` skips obvious-US before `get_job`; the structured gate is authoritative; ambiguous cases (null / "Remote" / unspecified) fall through to the downstream location gate. Real-world: about 29 of 40 dropped on a broad PM query.
 - **The `geoRestriction` source filter is exact-match on messy free text** (~250 distinct strings: city names, timezones, country lists), not a clean region enum. Arrays are ignored (they return the whole dataset), `"Worldwide"` returns 0 (the actual value is `"Anywhere in the World"`). Single exact values do work (`"EMEA"` 13, `"Europe"` 22, `"Sweden"` 5) but are brittle - do not rely on it as the geo filter, use the structured gate.
 - **ATS resolution (added 2026-06-09).** The canonical page embeds the Apply button as the outbound link tagged `utm_source=remotepmjobs.com...utm_campaign=apply`. Regex it out, strip the utm params (keep meaningful query such as `?gh_jid=`) and you get the real employer ATS URL (Greenhouse / Ashby / Workday / own careers; close to 100% hit rate). That becomes the JD's `**URL:**` / `**Apply page:**`; the remotepmjobs canonical moves to a `**Source:**` line. `lib/fetch-jd.mjs` has a `**Source:** {inputCanonical}` dedup fallback so a dispatched or pasted remotepmjobs URL still resolves on disk. **Dispatch and scan-history dedup stay keyed on the remotepmjobs canonical** - `search_jobs` only ever returns that.
+
+### Level 2g - Platsbanken (integrated 2026-09-24)
+
+Driven by `platsbanken_searches` in `user/config/portals.yml`. Arbetsförmedlingen's JobTech JobSearch API (`https://jobsearch.api.jobtechdev.se/search`) is official open data: free, no auth, no key. It is the only source that covers Swedish on-site and hybrid roles outside LinkedIn.
+
+- **`q` is an AND full-text match over headline + body**, so broad single words (`product`, `design`, `ux`) are the sweep; ~2,800 hits in total, and the global `title_filter` cuts it to a handful. Multi-word queries shrink fast (`product manager` 33, `head of product` 9). Pagination is 100/page with an offset cap of 2,000.
+- **Every hit ships the full JD** (`description.text`), employer legal name, `workplace_address`, `workplace_model` and `application_deadline`, so the JD is prefetched and agents skip `modes/_fetch.md`.
+- **`application_details.url` is the employer apply URL** for most ads (Teamtailor, Workday, Ashby, SmartRecruiters, Greenhouse, own careers pages). It becomes `**URL:**`/`**Apply page:**`; the Platsbanken ad URL stays on `**Source:**` and is the dispatch + dedup key, the same contract as remotepmjobs. The field is sometimes scheme-less or a recruiter's LinkedIn profile; both are handled.
+- **Cross-source dedup** on the apply URL and on cleaned-company::role against `applications.md`: the same Swedish ad often surfaces on LinkedIn too. Employer names are legal entities (`Lovable Labs Sweden AB`); trailing `AB`/`Aktiebolag`/`Sweden`/`(publ)` are stripped for the tracker.
+- **Many ads are Swedish-language or placed by staffing agencies** (Academic Work, ANTS, Nordic Investin). Language is handled by the deterministic location gate (`jd_language_not_allowed`); agencies go on the ban list when they turn up.
+- Smoke test: `node lib/scan-platsbanken.mjs --dry-run`.
+
+### startupmap.one (company seeding, 2026-09-24)
+
+`https://startupmap.one` maps European startups by city. It is used only to **seed Level 1**, never as a discovery level. `robots.txt` allows `/startup/*` (`Content-Signal: ai-input=yes`) and disallows `/api`, so `lib/import-startupmap.mjs` reads the sitemap, then each `/startup/{slug}_{cc}` page serially with a delay, pulls the embedded `website_careers_url`, keeps boards `scan.mjs`'s `detectApi()` recognises (plus Teamtailor custom domains via `/jobs.json`), probes each board once, and prints `tracked_companies` YAML to paste into `portals.yml`. Re-run it to pick up newly listed startups; already-tracked names and boards are skipped.
 
 ### Firecrawl (fetch and verify support, not discovery)
 
@@ -158,10 +153,12 @@ Run these **backgrounded**: a foreground loop over ~12 URLs blocked past a 7-min
 | remote.io | 2026-06-08 | Only structured source (`/api/portal/jobs`) is robots-disallowed; no RSS, no JSON-LD |
 | Upstream `scan-ats-full.mjs` reverse-ATS discovery | 2026-07-02 | Brute-force over a 28.7k third-party slug dump with zero geo/role metadata; US-heavy firehose |
 | hiring.cafe | removed 2026-09-10 | robots.txt disallows the `?searchState=` pattern; Cloudflare blocks Node's TLS fingerprint |
+| remoteineurope.com | removed 2026-09-24 | Site gone: redirects to weworkremotely.com, sitemap 404 since May 2026 |
+| We Work Remotely | removed 2026-09-24 | 0 of 38 scored JDs reached 4.0 - pure eval-token cost; apply URL is WWR-internal |
 
 ### englishjobs.se (2026-05-18)
 
-Technically it would have been easy: a WordPress site with a clean zero-token REST API at `https://www.englishjobs.se/wp-json/wp/v2/jobs` (256 jobs, `X-WP-Total` / `X-WP-TotalPages` pagination, `?after=ISO&orderby=date&order=desc&_fields=...` for incremental delta, full JD HTML in `content.rendered`, `job-role` / `job-type` taxonomies). A `lib/scan-englishjobs.mjs` cloned from the remoteineurope helper would have slotted in as Level 2d.
+Technically it would have been easy: a WordPress site with a clean zero-token REST API at `https://www.englishjobs.se/wp-json/wp/v2/jobs` (256 jobs, `X-WP-Total` / `X-WP-TotalPages` pagination, `?after=ISO&orderby=date&order=desc&_fields=...` for incremental delta, full JD HTML in `content.rendered`, `job-role` / `job-type` taxonomies). A `lib/scan-englishjobs.mjs` cloned from the (since removed) remoteineurope helper would have slotted in as Level 2d.
 
 **Why rejected:** there is no employer/company field anywhere in the structured data and no external employer ATS link. The only apply path is `mailto:...@englishjobs.se` - recruiter/agency-mediated, reposted and aggregated listings. That breaks the tracker's Company column and dedup, and it breaks `modes/apply.md`'s real-employer-form model. It is exactly the low-signal recruiter-pool category the quality-over-quantity design filters against. Do not re-propose or re-investigate unless the user asks.
 
@@ -175,7 +172,7 @@ Upstream `scan-ats-full.mjs` (santifer/career-ops #746) "reverse ATS discovery" 
 
 At the time, the decisive reason to skip was that the fork already had the better version in hiring.cafe (server-side geo, workplace-type, date and semantic filtering, returning the employer's real apply URL). **hiring.cafe has since been removed** (below), so that specific argument no longer holds - but the primary objection stands on its own: geo-precision and ethos, not recruiter-pool noise. The slug dump still carries no geo or role metadata.
 
-Cheaper alternatives already present: broaden the role phrases and geo settings on the existing searches, add newly found companies to `portals.yml` `tracked_companies`, and lean on remoteineurope / remotepmjobs / WWR. Seeding the slug universe from `portals.yml` is pointless - `scan.mjs` already scans those at Level 1. The only defensible lite variant would be VC-portfolio seeds (`--seeds yc,a16z`, bounded to a few thousand), but that is US and early-stage skewed; revisit only if startup coverage is specifically wanted.
+Cheaper alternatives already present: broaden the role phrases and geo settings on the existing searches, add newly found companies to `portals.yml` `tracked_companies`, and lean on remotepmjobs / Platsbanken. Seeding the slug universe from `portals.yml` is pointless - `scan.mjs` already scans those at Level 1. The only defensible lite variant would be VC-portfolio seeds (`--seeds yc,a16z`, bounded to a few thousand), but that is US and early-stage skewed; revisit only if startup coverage is specifically wanted.
 
 ### hiring.cafe (removed 2026-09-10)
 
@@ -200,7 +197,7 @@ The SSR scheme itself never broke (`__NEXT_DATA__` to `props.pageProps.ssrHits` 
 
 **Scale:** ~75,660 board slugs across 36 ATS providers, ~3.12M postings, nightly consolidation to R2 at `https://backend.dehnbostele.workers.dev/data/*`. A free `POST /status` (60 per 10 min) returns `open` / `removed` per posting straight from the crawler - a genuine liveness oracle. `POST /embed` is 10 per 10 min. `/export`, `/boards/*` and `/ats` are admin-only.
 
-**Access pattern that works (verified):** DuckDB httpfs `read_parquet()` over the daily diff parquet with column pruning - a real `title_filter` plus EU geo regex returned counts in 3.9-6.9s against a 189 MB file **without downloading it**. The `content` column carries full JD text, so a level built on this would prefetch JDs zero-token and agents would skip `modes/_fetch.md`, like the WWR and LinkedIn levels.
+**Access pattern that works (verified):** DuckDB httpfs `read_parquet()` over the daily diff parquet with column pruning - a real `title_filter` plus EU geo regex returned counts in 3.9-6.9s against a 189 MB file **without downloading it**. The `content` column carries full JD text, so a level built on this would prefetch JDs zero-token and agents would skip `modes/_fetch.md`, like the LinkedIn and Platsbanken levels.
 
 **Two blockers as of 2026-09-10 - check both before building:**
 
@@ -214,3 +211,5 @@ The SSR scheme itself never broke (`__NEXT_DATA__` to `props.pageProps.ssrHits` 
 **Risks:** bus factor 1 (279 of 282 commits from one person, 0 releases, high daily churn, README explicitly declines an uptime commitment). The `dark` tier includes recruitment agencies posing as employers, and the `staffing` flag is populated on only 42% of rows, so the ban list would need to grow. Job-level enrichment is 1.9% populated, so all geo and seniority gating must be ours, locally, on title and location strings.
 
 **Decision rule:** if the diff 500s persist two weeks out, treat that as a reliability signal and do not integrate.
+
+**Recheck 2026-09-24:** blocker 1 is cleared going forward - every diff from `2026-09-08__2026-09-09` to `2026-09-23__2026-09-24` serves (206 on a range probe); only the two oldest (09-06, 09-07) still 500. The chain is unbroken but not strictly daily (`2026-09-14__2026-09-18`, `2026-09-20__2026-09-23` are multi-day diffs), so a consumer must replay by `from == head`, not by calendar date (`diffs/index.json` documents this). `manifest.json` now splits `jobs` (3.61M first-party) from `jobs_aggregator` (3.75M), consistent with blocker 2 being live; the `tier` column itself was not inspected (DuckDB httpfs could not be installed in the sandbox).
