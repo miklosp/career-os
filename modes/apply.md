@@ -6,14 +6,14 @@ This mode does **not** detect or search for which job is being applied to. Its j
 
 ## Inputs (handed in — never discovered)
 
-The dispatch names everything this mode needs. Read what you are given; do **not** grep `data/reports/` or `data/applications.md` to reconstruct context.
+The dispatch names everything this mode needs. Read what you are given; do **not** grep `user/data/reports/` or `user/data/applications.md` to reconstruct context.
 
 - **Application #NUM · company · role** — the identity of the application.
-- **Report** — exact path to the evaluation report (`data/reports/{NUM}-…-….md`). Open it directly.
-- **CV PDF** — exact path to the customized CV (`output/customized-cvs/{NUM}-…-cv.pdf`), when one exists.
+- **Report** — exact path to the evaluation report (`user/data/reports/{NUM}-…-….md`). Open it directly.
+- **CV PDF** — exact path to the customized CV (`user/output/customized-cvs/{NUM}-…-cv.pdf`), when one exists.
 - **Form URL** — the application form to open.
 
-If a required input is missing — no report path, no form URL — **ask the user** for it. Do not go searching. The single exception: if no CV PDF path was given, you may check `output/customized-cvs/{NUM}-*-cv.pdf` once; if nothing is there, tell the user this application has no customized CV yet and ask how to proceed.
+If a required input is missing — no report path, no form URL — **ask the user** for it. Do not go searching. The single exception: if no CV PDF path was given, you may check `user/output/customized-cvs/{NUM}-*-cv.pdf` once; if nothing is there, tell the user this application has no customized CV yet and ask how to proceed.
 
 **No reviewed CV yet (PDF ❌)?** When that check turns up no CV PDF, offer `/career-ops tailor {NUM}` before form-filling — it tailors the CV against the JD, walks the fact-check review, and renders the PDF, then hands back here. Proceeding without one is fine if the user prefers the generic CV; don't block on it.
 
@@ -139,7 +139,7 @@ Read the **Report** at the exact path from the dispatch. That is the only file t
 - **Criteria ledger** (bottom of the report) — the employer's screening needs as `[evidenced]`/`[gap]` bullets. This is the ranked needs list every answer must prove against.
 - **Section G**, if the report already has one — answers from a prior apply run against this company. They are battle-tested; use them as the base and refine, don't start from scratch.
 
-When a question calls for a full story ("tell us about a project"), resolve the cited `S0xx` ids in `config/story-bank.md` — but only the ids the selected criteria cite, not the whole bank.
+When a question calls for a full story ("tell us about a project"), resolve the cited `S0xx` ids in `user/config/story-bank.md` — but only the ids the selected criteria cite, not the whole bank.
 
 ## Step 3 — Analyze form questions
 
@@ -152,7 +152,7 @@ Identify ALL visible questions:
 
 Classify each question:
 - **Already answered in Section G** → adapt the existing answer.
-- **New question** → generate an answer from the report + `config/cv.md`.
+- **New question** → generate an answer from the report + `user/config/cv.md`.
 
 ## Step 4 — Generate answers
 
@@ -168,11 +168,11 @@ Classify each question:
 
 1. **Select evidence, then draft:**
    - **Selection first**: name which 1–2 Criteria-ledger items (or Block-A matches) this question probes. The answer draws on the evidence behind those — at most two proofs/stories — unless the question explicitly asks for more. Everything else stays out, however strong it is.
-   - **Report context**: Block-A matches and `[evidenced]` criteria with their `[src: id]` evidence; resolve `S0xx` ids in `config/story-bank.md` for story questions.
+   - **Report context**: Block-A matches and `[evidenced]` criteria with their `[src: id]` evidence; resolve `S0xx` ids in `user/config/story-bank.md` for story questions.
    - **Prior Section G**: if a draft answer exists, use it as a base and refine.
    - **"I'm choosing you" tone**: same framework as auto-pipeline.
    - **Specificity**: reference something concrete from the JD visible on screen.
-2. **Voice pass** — rewrite the draft in the candidate's signature per `config/profile.md` → **Voice & Branding** (first person, proof-before-claim, builder's register, confident close). Keep the selected evidence intact; cut anything that doesn't answer the literal question, and never re-add evidence the selection step left out.
+2. **Voice pass** — rewrite the draft in the candidate's signature per `user/config/profile.md` → **Voice & Branding** (first person, proof-before-claim, builder's register, confident close). Keep the selected evidence intact; cut anything that doesn't answer the literal question, and never re-add evidence the selection step left out.
 3. **Scrub pass** — enforce `modes/_writing.md` §2–§4 on the result: kill corporate-speak and AI-tell vocabulary, strip AI-writing patterns (em-dash/rule-of-three/negative-parallelism/vague-attribution/filler), fix passive voice, vary structure. Then the §6 self-check.
 4. Only after both passes is the answer ready — proceed to Step 5 to fill it (or present it for copy-paste).
 
@@ -218,12 +218,12 @@ Browser-filled text has no normalizer in its path — apply the `modes/_writing.
 - **cmux path:** no upload command — give the candidate that exact path and ask them to attach it in the visible surface.
 - **agent-browser fallback:** `agent-browser --session-name apply upload @eN "<CV PDF path>"`.
 
-**Proofread the candidate's own edits before Submit.** When the candidate hands back his own rewrite of a letter or a free-text answer, do not treat "as edited by me" as final and clean. His rewrites beat the draft on substance - he replaces the framing with the motivation he actually holds - but they are typed straight into a browser textarea with no normalizer in the path, so they arrive with mechanical errors. On nPlan #2067 an edited letter carried four into a form about to be submitted: `similiar`, "agents that earns the trust", a present-tense overclaim ("the features I shipped ensure a 100 percent renewal rate" - `secberus-b10` only supports "achieving 100% contract renewal rate"), and a curly apostrophe. All four fixes were accepted.
+**Proofread the candidate's own edits before Submit.** When the candidate hands back their own rewrite of a letter or a free-text answer, do not treat "as edited by me" as final and clean. Their rewrites beat the draft on substance - they replace the framing with the motivation he actually holds - but they are typed straight into a browser textarea with no normalizer in the path, so they arrive with mechanical errors. On one application an edited letter carried four into a form about to be submitted: `similiar`, "agents that earns the trust", a present-tense overclaim ("the features I shipped ensure a 100 percent renewal rate" - `acme-b10` only supports "achieving 100% contract renewal rate"), and a curly apostrophe. All four fixes were accepted.
 
 - Read the value back out of the live field via `eval`. Never trust the paste in chat, and never trust screenshots.
 - Check for misspellings, subject-verb agreement, tense drift, and smart quotes / em-dashes (`modes/_writing.md` §5).
-- Check any metric phrasing back against its `[src: id]` evidence - his edits sometimes tighten a claim into a stronger causal assertion than the source supports.
-- Present the errors as a short before/after table naming the issue, then apply on one confirmation. **Fix errors only** - never re-impose your own wording on his voice.
+- Check any metric phrasing back against its `[src: id]` evidence - their edits sometimes tighten a claim into a stronger causal assertion than the source supports.
+- Present the errors as a short before/after table naming the issue, then apply on one confirmation. **Fix errors only** - never re-impose your own wording on their voice.
 
 When every field is filled, screenshot the top and bottom of the form to `/tmp/career-apply-screens/{NUM}-*.png` (`cmux browser surface:N screenshot --out <path>` or `agent-browser --session-name apply screenshot`) and present both to the candidate.
 
@@ -233,14 +233,14 @@ When every field is filled, screenshot the top and bottom of the form to `/tmp/c
 
 When the candidate confirms they submitted (or says they did it themselves):
 
-1. **Verify tracker status.** Find the row for application #NUM in `data/applications.md`; if it's not yet `Applied`, update it (merge-tracker is the user's job, but a direct single-status flip is fine). Match the row on its `| NUM |` cell — you already have NUM, so this is a targeted edit, not a search.
+1. **Verify tracker status.** Find the row for application #NUM in `user/data/applications.md`; if it's not yet `Applied`, update it (merge-tracker is the user's job, but a direct single-status flip is fine). Match the row on its `| NUM |` cell — you already have NUM, so this is a targeted edit, not a search. In the same edit fill the outcome columns if empty: **Applied Date** = the submit date (YYYY-MM-DD), **Channel** = how the application reached the company (`cold-ats` by default; `referral`, `recruiter`, `exec-search` or `outreach` when the candidate says so — ask if the dispatch hinted at a contact), **Furthest Stage** = `none`. Vocabularies: `templates/states.yml` `outcome`.
 2. **Append Section G to the report** — MANDATORY, not optional. Write the ACTUAL text that went into each form field, verbatim, under a `## Section G — Submitted Answers` heading at the bottom of the report. Include:
    - **Form URL** and the date submitted.
    - Each question as a `###` subheading. Place the submitted answer as plain-text paragraphs directly under the heading — NO `> ` blockquote wrapping, NO indentation. The candidate should be able to copy an answer directly into a reused form field without cleanup.
-   - A short **Drafting notes** subsection at the end — what voice moves worked (e.g. "led with Botkube not the generic opener"), any phrasing the candidate pushed back on, and which antipatterns the scrub pass caught. This is the future-self handoff; it compounds across applications.
+   - A short **Drafting notes** subsection at the end — what voice moves worked (e.g. "led with the Globex pilot not the generic opener"), any phrasing the candidate pushed back on, and which antipatterns the scrub pass caught. This is the future-self handoff; it compounds across applications.
    If a cover letter went in (paste or PDF), also keep it: copy the letter as
    actually sent, including the candidate's edits, to
-   `config/cover-letters/{NUM}-{slug}.md` per `modes/cover-letter.md` Step 8.
+   `user/config/cover-letters/{NUM}-{slug}.md` per `modes/cover-letter.md` Step 8.
    That directory is the only corpus of accepted letters and feeds the next
    draft.
 

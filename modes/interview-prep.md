@@ -5,10 +5,10 @@ When the user asks to prep for an interview at a specific company+role, or when 
 ## Inputs
 
 1. **Company name** and **role title** (required)
-2. **Evaluation report** in `data/reports/` (if exists) — read for archetype, gaps, matched proof points
-3. **Story bank** at `config/story-bank.md` — read for existing prepared stories
-4. **CV** at `config/cv.md` — read for proof points
-5. **Profile** at `config/profile.md` — read for candidate context
+2. **Evaluation report** in `user/data/reports/` (if exists) — read for archetype, gaps, matched proof points
+3. **Story bank** at `user/config/story-bank.md` — read for existing prepared stories
+4. **CV** at `user/config/cv.md` — read for proof points
+5. **Profile** at `user/config/profile.md` — read for candidate context
 
 ## Step 1 — Research
 
@@ -74,7 +74,7 @@ Questions tied to the specific job description (archetype-aware).
 For each: the question, why they're likely asking it (what JD requirement it maps to), and the candidate's best angle.
 
 ### Background Red Flags
-Questions the interviewer will probably ask about gaps, transitions, or unusual elements in the candidate's background. Read `config/profile.md` and `config/cv.md` to identify what might raise questions.
+Questions the interviewer will probably ask about gaps, transitions, or unusual elements in the candidate's background. Read `user/config/profile.md` and `user/config/cv.md` to identify what might raise questions.
 For each: the likely question, why it comes up, and a recommended framing (honest, specific, forward-looking — never defensive).
 
 ## Step 5 — Story Bank Mapping
@@ -87,7 +87,7 @@ For each: the likely question, why it comes up, and a recommended framing (hones
 - **partial**: story is adjacent, needs reframing
 - **none**: no existing story — flag for the user
 
-For each gap, suggest: "You need a story about {topic}. Consider: {specific experience from config/cv.md that could become a STAR+R story}."
+For each gap, suggest: "You need a story about {topic}. Consider: {specific experience from user/config/cv.md that could become a STAR+R story}."
 
 If a gap has no mapped story, **check for near-coverage before drafting a new one**: scan every story's **Best For** list and STAR+R body. If an existing story already covers the underlying experience — even under a different interview angle — extend its **Best For** with the new question type rather than creating a near-duplicate. Draft a genuinely new story only when no existing story maps to the experience; route the user through `/career-ops storybank add` so it gets the next free `S0xx` id and a complete header.
 
@@ -117,10 +117,10 @@ Things to say, do, and avoid based on research:
 Triage (`modes/_eval.md`) deliberately skips comp — it lands here, once a
 role is real enough to interview for. Pull together:
 
-- **The candidate's comp anchor** from `config/profile.md` → **Comp Anchor**
+- **The candidate's comp anchor** from `user/config/profile.md` → **Comp Anchor**
   (target range, walk-away floor, equity stance). This is the anchor — never
   invent numbers. There is no stored negotiation script: derive the opening
-  move from the Comp Anchor plus `config/profile.md` → **Voice & Branding**.
+  move from the Comp Anchor plus `user/config/profile.md` → **Voice & Branding**.
 - **Market data** from Step 1: any comp figures or negotiation notes
   surfaced in the Glassdoor / Blind / Levels searches. Cite the source
   and date for every figure; label anything inferred as `[inferred]`.
@@ -140,7 +140,7 @@ candidate's own targets — do not fabricate a benchmark.
 
 ## Output
 
-Save the full report to `output/interview-prep/{NUM}-{company-slug}-{role-slug}.md` with this header:
+Save the full report to `user/output/interview-prep/{NUM}-{company-slug}-{role-slug}.md` with this header:
 
 ```markdown
 # Interview Intel: {Company} — {Role}

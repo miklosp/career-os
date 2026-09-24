@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
+
 	"career-ops/dashboard/internal/model"
 	"career-ops/dashboard/internal/theme"
 )
@@ -92,5 +94,69 @@ func TestRenderAppLineIncludesDateColumn(t *testing.T) {
 
 	if !strings.Contains(line, "04/13") {
 		t.Fatalf("expected rendered line to include date column, got %q", line)
+	}
+}
+
+func TestPruneThresholdStepsWithoutDrift(t *testing.T) {
+	pm := NewPipelineModel(
+		theme.NewTheme("catppuccin-mocha"),
+		nil,
+		model.PipelineMetrics{},
+		"..",
+		120,
+		40,
+	)
+	pm.pruneConfirm = true
+	pm.pruneThreshold = defaultPruneThreshold
+
+	for i := 0; i < 3; i++ {
+		pm, _ = pm.handlePruneConfirm(tea.KeyMsg{Type: tea.KeyDown})
+	}
+	if pm.pruneThreshold != 2.7 {
+		t.Fatalf("expected threshold 2.7 after three 0.1 steps down, got %v", pm.pruneThreshold)
+	}
+
+	pm, _ = pm.handlePruneConfirm(tea.KeyMsg{Type: tea.KeyUp})
+	if pm.pruneThreshold != 2.8 {
+		t.Fatalf("expected threshold 2.8 after stepping back up, got %v", pm.pruneThreshold)
+	}
+}
+
+func TestRenderAppLineAppliedTabShowsAppliedDateAndSV(t *testing.T) {
+	pm := NewPipelineModel(
+		theme.NewTheme("catppuccin-mocha"),
+		nil,
+		model.PipelineMetrics{},
+		"..",
+		120,
+		40,
+	)
+	app := model.CareerApplication{
+		Date:        "2026-04-13",
+		AppliedDate: "2026-05-02",
+		Company:     "Initech",
+		Role:        "Product Manager",
+		Status:      "Applied",
+		Score:       4.1,
+		InSweden:    true,
+	}
+	for i, tab := range pipelineTabs {
+		if tab.filter == filterApplied {
+			pm.activeTab = i
+		}
+	}
+	line := pm.renderAppLine(app, false)
+	if !strings.Contains(line, "05/02") || strings.Contains(line, "04/13") {
+		t.Fatalf("APPLIED tab should show the applied date, got %q", line)
+	}
+	if !strings.Contains(line, "SV") {
+		t.Fatalf("expected SV marker for a Sweden-located job, got %q", line)
+	}
+
+	pm.activeTab = 0
+	app.InSweden = false
+	line = pm.renderAppLine(app, false)
+	if !strings.Contains(line, "04/13") || strings.Contains(line, "SV") {
+		t.Fatalf("other tabs keep the tracker date and no SV marker, got %q", line)
 	}
 }

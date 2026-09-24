@@ -73,7 +73,7 @@ disk.
    node lib/eval-context.mjs <num...>
    ```
 
-   Emits: id-annotated CV, `config/profile.md`, story-bank digest (S0xx
+   Emits: id-annotated CV, `user/config/profile.md`, story-bank digest (S0xx
    ids stay citable), confirmed notes, `templates/report.example.md`, and
    every JD in the batch. Do NOT re-Read any of these files.
 2. Read `modes/_eval.md` once — the scoring spec for every JD in the
@@ -98,10 +98,12 @@ disk.
    - `unknown-host` / `error` — load `modes/_fetch.md` and follow it.
      After a successful resolve of a *new structured source*, teach the
      registry (`--learn`) so the next hit is zero-token.
-   - `exists` with `appStatus` null (orphaned JD) — re-register only:
-     append the `Fetched` row for the returned `num` (see `_fetch.md`
-     Step 5).
-   - `banned`, or `exists` in a terminal state — stop silently.
+   - `exists` with `appStatus` null and no `user/data/reports/{num}-*.md`
+     (orphaned JD) — re-register only: append the `Fetched` row for the
+     returned `num` (see `_fetch.md` Step 5).
+   - `banned`, `exists` in a terminal state, or `exists` with `appStatus`
+     null but a report on disk (row removed by `dedup-tracker.mjs` as a
+     duplicate) — stop silently.
 2. **Gate** — `node lib/location-gate.mjs {NUM}`. Exit 10 → stop (row
    updated). Exit 20 → follow `modes/_location-gate.md`; on SKIP, stop.
 3. **Score** — `node lib/eval-context.mjs {NUM}`, then follow

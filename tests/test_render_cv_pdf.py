@@ -4,9 +4,9 @@
 Dependency-free (plain asserts, no pytest). Run:  uv run tests/test_render_cv_pdf.py
 
 Every case here is a real failure shape that reached a generated PDF:
-  - "::: democracy" (empty div)          — CV 3199, nShift
-  - "::: description" never closed        — CV 554,  nShift (submitted)
-  - "::: development description"         — CV 200,  evroc  (submitted)
+  - "::: democracy" (empty div)          — CV 3199, Umbrella
+  - "::: description" never closed        — CV 554,  Umbrella (submitted)
+  - "::: development description"         — CV 200,  Initech  (submitted)
 """
 
 import sys
@@ -62,15 +62,15 @@ check(
 
 # ── normalize_fences ──────────────────────────────────────────────────────────
 
-# The 200/evroc bug: a class with stray words matches no fence pattern.
+# The 200/Initech bug: a class with stray words matches no fence pattern.
 text, fixes = r.normalize_fences("::: development description\nLed UX design.\n:::\n")
 check("multi-word class is normalized", text, "::: description\nLed UX design.\n:::\n")
 check("multi-word class is reported", len(fixes), 1)
 
-# The 554/nShift bug: an opener with no closer.
-text, fixes = r.normalize_fences("::: description\nA consultancy.\n\n**Botkube** - platform\n")
+# The 554/Umbrella bug: an opener with no closer.
+text, fixes = r.normalize_fences("::: description\nA consultancy.\n\n**Globex** - platform\n")
 check("unclosed fence is closed at the blank line", text,
-      "::: description\nA consultancy.\n:::\n\n**Botkube** - platform\n")
+      "::: description\nA consultancy.\n:::\n\n**Globex** - platform\n")
 check("unclosed fence is reported", len(fixes), 1)
 
 text, fixes = r.normalize_fences("::: description\nTrailing.\n")
@@ -80,9 +80,9 @@ text, fixes = r.normalize_fences("::: description\nA\n:::\n\n::: description\nB\
 check("well-formed input is left alone", fixes, [])
 
 # End to end: the exact 554 shape must render clean.
-text, _ = r.normalize_fences("::: description\nA consultancy.\n\n**Botkube** - platform\n")
+text, _ = r.normalize_fences("::: description\nA consultancy.\n\n**Globex** - platform\n")
 check("repaired 554 shape converts to HTML", r.expand_fenced_divs(text),
-      '<div class="description">\nA consultancy.\n</div>\n\n**Botkube** - platform\n')
+      '<div class="description">\nA consultancy.\n</div>\n\n**Globex** - platform\n')
 
 # ── find_markup_leaks patterns ────────────────────────────────────────────────
 

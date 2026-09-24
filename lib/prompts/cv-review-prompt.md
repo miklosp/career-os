@@ -18,7 +18,7 @@ The **Job Description is CONTEXT ONLY** — never a source of candidate truth. Y
 
 ## Citation-grounded checking (do this first)
 
-Walk the Citation Map. A bullet may cite **multiple** ids — judge it against the **union** of its cited sources' texts. Flag when:
+Walk the Citation Map. For each generated bullet, compare it to the source text behind its cited id (the Summary: the union of its composite). Flag when:
 - no cited source — nor any other closed-world source — supports the bullet's specific claim (entities, metrics, scope) → `fabricated` or `stretched`;
 - the bullet adds a language/framework/SDK/metric/year-count that no closed-world source contains → `fabricated`;
 - the Summary makes a claim no closed-world source backs → `fabricated`/`stretched`.
@@ -101,7 +101,7 @@ Output ONLY a JSON object matching the schema below. No prose, no markdown code 
     {
       "id": "f1",
       "severity": "fabricated" | "stretched" | "bridge",
-      "section": "string — section name from generated CV (e.g., 'Summary', 'Core Competencies', 'Secberus role')",
+      "section": "string — section name from generated CV (e.g., 'Summary', 'Core Competencies', 'Acme role')",
       "generated_text": "string — EXACT verbatim substring from generated CV",
       "source_cv_evidence": "string — supporting text from source CV / story bank / Block-A Match, or 'NONE' if nothing supports it",
       "issue": "string — one-sentence explanation",
@@ -122,8 +122,8 @@ Output ONLY a JSON object matching the schema below. No prose, no markdown code 
 - `generated_text` and `replacement` are a mechanical find/replace pair: the consumer runs `cv.replace(generated_text, replacement)` literally. Both must be exact.
 - `generated_text` MUST be a verbatim substring of the generated CV. Keep it minimal — just the offending or bridgeable phrase, not the whole bullet.
 - **`replacement` is the literal text spliced in, NOT a description of the fix.** Output only the words that should appear in the CV. No surrounding quotes, no "Could upgrade to…", no "— defensible from <id>", no rationale. The explanation belongs in `issue`; the supporting evidence id belongs in `source_cv_evidence`.
-  - WRONG — `"replacement": "Could upgrade to 'Wrote SQL queries to extract product usage metrics' — defensible from secberus-b6."`
-  - RIGHT — `"replacement": "Wrote SQL queries to extract product usage metrics"`, with `"source_cv_evidence": "secberus-b6: …"` and the reasoning in `"issue"`.
+  - WRONG — `"replacement": "Could upgrade to 'Wrote SQL queries to extract product usage metrics' — defensible from acme-b6."`
+  - RIGHT — `"replacement": "Wrote SQL queries to extract product usage metrics"`, with `"source_cv_evidence": "acme-b6: …"` and the reasoning in `"issue"`.
 - **`replacement` semantics depend on severity:**
   - For `fabricated` / `stretched`: the conservative downgrade the user should accept by default. Empty string `""` means "delete generated_text entirely."
   - For `bridge`: the JD-vocabulary upgrade the user can accept if they want stronger ATS alignment. The user's default is to KEEP generated_text (conservative); accepting swaps in `replacement`.

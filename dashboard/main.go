@@ -17,6 +17,7 @@ import (
 
 	"career-ops/dashboard/internal/data"
 	"career-ops/dashboard/internal/model"
+	"career-ops/dashboard/internal/paths"
 	"career-ops/dashboard/internal/theme"
 	"career-ops/dashboard/internal/ui/screens"
 )
@@ -52,7 +53,7 @@ func (m *appModel) openCurrentReport() {
 		m.state = viewPipeline
 		return
 	}
-	fullPath := filepath.Join(m.careerOpsPath, app.ReportPath)
+	fullPath := paths.User(m.careerOpsPath, app.ReportPath)
 	title := fmt.Sprintf("%s — %s", app.Company, app.Role)
 	m.viewer = screens.NewViewerModel(m.theme, fullPath, title, m.pipeline.Width(), m.pipeline.Height())
 	m.state = viewReport
@@ -245,8 +246,8 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if base == "" {
 			return m, nil
 		}
-		cvPath := filepath.Join(msg.CareerOpsPath, "output", "customized-cvs", base+"-cv.md")
-		reviewJSONPath := filepath.Join(msg.CareerOpsPath, "output", "customized-cvs", base+"-cv-review.json")
+		cvPath := paths.Output(msg.CareerOpsPath, "customized-cvs", base+"-cv.md")
+		reviewJSONPath := paths.Output(msg.CareerOpsPath, "customized-cvs", base+"-cv-review.json")
 		key := msg.App.ReportPath
 		if key == "" {
 			key = msg.App.Company + "/" + msg.App.Role
@@ -316,7 +317,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.pipeline = pm
 		m.reloadPipelineData()
 		if msg.openAfter && msg.app.ReportPath != "" {
-			fullPath := filepath.Join(m.careerOpsPath, msg.app.ReportPath)
+			fullPath := paths.User(m.careerOpsPath, msg.app.ReportPath)
 			title := fmt.Sprintf("%s — %s", msg.app.Company, msg.app.Role)
 			jobURL := msg.app.JobURL
 			openCmd := func() tea.Msg {
@@ -529,9 +530,11 @@ func applyPrompt(launcher, careerOpsPath string, app model.CareerApplication) st
 
 	// Exact report path off the tracker link; fall back to a NUM glob only
 	// when the row carries no report link at all.
-	report := app.ReportPath
-	if report == "" && app.ReportNumber != "" {
-		report = "data/reports/" + app.ReportNumber + "-*.md"
+	report := ""
+	if app.ReportPath != "" {
+		report = paths.Display(careerOpsPath, paths.User(careerOpsPath, app.ReportPath))
+	} else if app.ReportNumber != "" {
+		report = paths.Display(careerOpsPath, paths.Data(careerOpsPath, "reports", app.ReportNumber+"-*.md"))
 	}
 	cv := resolveCustomizedCV(careerOpsPath, app.ReportNumber)
 
@@ -622,30 +625,25 @@ func tailorPrompt(launcher, careerOpsPath string, app model.CareerApplication) s
 	return b.String()
 }
 
-// resolveCustomizedCV returns the repo-relative path of the customized CV PDF
+// resolveCustomizedCV returns the prompt path (paths.Display) of the customized CV PDF
 // for a tracker NUM (output/customized-cvs/{NUM}-*-cv.pdf), or "" when none has
 // been generated yet. Passing the exact path spares the apply agent a glob.
 func resolveCustomizedCV(careerOpsPath, num string) string {
 	if num == "" {
 		return ""
 	}
-	matches, err := filepath.Glob(filepath.Join(
-		careerOpsPath, "output", "customized-cvs", num+"-*-cv.pdf"))
+	matches, err := filepath.Glob(paths.Output(careerOpsPath, "customized-cvs", num+"-*-cv.pdf"))
 	if err != nil || len(matches) == 0 {
 		return ""
 	}
-	rel, err := filepath.Rel(careerOpsPath, matches[0])
-	if err != nil {
-		return ""
-	}
-	return rel
+	return paths.Display(careerOpsPath, matches[0])
 }
 
 // spawnAgentWorkspace launches an interactive, primed agent session for `app`.
 // Inside a reachable cmux it opens a new workspace (tab) titled `title` running
 // `launcher <prompt>` in the repo; outside cmux — or on spawn failure — it
 // degrades to opening the app's job URL in the host browser. Shared by the
-// apply (`a`) and tailor (`g`) launch paths, which differ only in workspace
+// apply (`a`) and tailor (`t`) launch paths, which differ only in workspace
 // title and primed prompt.
 //
 // The launcher token comes from applyLauncher() (env → .env
@@ -757,7 +755,7 @@ func shellQuote(s string) string {
 }
 
 // runSpawn runs cmd capturing combined stdout+stderr. On failure it appends a
-// diagnostic block to <careerOpsPath>/output/customized-cvs/cvgen.log and
+// diagnostic block to <user dir>/output/customized-cvs/cvgen.log and
 // returns an error carrying the last non-empty output line, so a failed CV
 // step surfaces a real reason (in the log) instead of the dashboard's silent
 // red "PDF ✗".
@@ -770,7 +768,7 @@ func runSpawn(cmd *exec.Cmd, careerOpsPath, label string) error {
 		return nil
 	}
 	out := buf.String()
-	dir := filepath.Join(careerOpsPath, "output", "customized-cvs")
+	dir := paths.Output(careerOpsPath, "customized-cvs")
 	_ = os.MkdirAll(dir, 0o755)
 	if f, ferr := os.OpenFile(filepath.Join(dir, "cvgen.log"),
 		os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644); ferr == nil {
@@ -806,7 +804,7 @@ func main() {
 	// Load applications
 	apps := data.ParseApplications(careerOpsPath)
 	if apps == nil {
-		fmt.Fprintf(os.Stderr, "Error: could not find applications.md in %s or %s/data/\n", careerOpsPath, careerOpsPath)
+		fmt.Fprintf(os.Stderr, "Error: could not find %s\n", paths.Data(careerOpsPath, "applications.md"))
 		os.Exit(1)
 	}
 

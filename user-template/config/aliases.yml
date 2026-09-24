@@ -1,0 +1,21 @@
+# aliases.yml — hand-curated equivalences for the deterministic CV validator.
+#
+# Each entry: a canonical term and surface forms that mean the SAME thing and
+# may be used interchangeably without contradicting the source CV. The validator
+# (lib/cv-validate.mjs) and the reviewer treat any listed form as satisfying a
+# verbatim source/JD match for the high-risk entity check (Rule C) and the
+# closed-world skills check (Rule D).
+#
+# This is NOT a bridge mechanism. Bridges are JD-vocabulary substitutions the
+# user reviews per-application (see lib/prompts/ats-prompt.md). Aliases are
+# globally-true synonyms (acronym <-> expansion, vendor spelling variants).
+# Only add a pair if "they are literally the same thing" is defensible in an
+# interview with zero new history. When in doubt, leave it out — a missing
+# alias produces a (safe) false flag the user resolves; a wrong alias hides a
+# real fabrication.
+
+aliases:
+  - canonical: "OKRs"
+    forms: ["Objectives and Key Results", "OKR"]
+  - canonical: "SaaS"
+    forms: ["software-as-a-service", "Software as a Service"]

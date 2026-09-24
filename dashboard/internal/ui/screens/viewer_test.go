@@ -19,7 +19,7 @@ const sampleReport = `# Acme — Head of Product
 
 ## Triage
 
-- Miklós's B2B SaaS product leadership at scale (0→$1M ARR at Secberus, team management, cross-functional execution) maps directly to the role's requirement for managing Product Owners and aligning roadmaps across multiple squads.
+- Alex's B2B SaaS product leadership at scale (0→$2M ARR at Globex, team management, cross-functional execution) maps directly to the role's requirement for managing Product Owners and aligning roadmaps across multiple squads.
 
 This is an ordinary paragraph that keeps going well past the available width so that it must be re-flowed onto several lines instead of disappearing off the right edge of the terminal viewport.
 
@@ -82,7 +82,7 @@ func TestLongBulletHangingIndent(t *testing.T) {
 	// are indented by two spaces.
 	var firstIdx = -1
 	for i, vl := range m.visualLines {
-		if strings.HasPrefix(stripANSI(vl), "- Miklós") {
+		if strings.HasPrefix(stripANSI(vl), "- Alex") {
 			firstIdx = i
 			break
 		}

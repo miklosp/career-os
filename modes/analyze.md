@@ -11,10 +11,10 @@ For mock interviews you've run inside this system, use `mock` (it generates the 
 | `{transcript-path}` | ALWAYS (required arg) | The transcript to score |
 | `modes/_rubrics.md` | ALWAYS | 5-dim score anchors, root cause taxonomy, **triage priority stack** |
 | `modes/_round-types.md` | If transcript declares a round type | Per-round weight shift for the Hire Signal roll-up |
-| `config/story-bank.md` | ALWAYS | Cross-reference stories used; flag overuse / freshness |
-| `data/interview-prep/{NUM}-*.md` | If `--company` is set AND prep exists | Compare against pre-interview expectations |
-| `data/score-history.md` | ALWAYS (append at end; also read to surface trends) | Score log |
-| `data/applications.md` | If `--company` is set | Cross-reference current tracker row |
+| `user/config/story-bank.md` | ALWAYS | Cross-reference stories used; flag overuse / freshness |
+| `user/data/interview-prep/{NUM}-*.md` | If `--company` is set AND prep exists | Compare against pre-interview expectations |
+| `user/data/score-history.md` | ALWAYS (append at end; also read to surface trends) | Score log |
+| `user/data/applications.md` | If `--company` is set | Cross-reference current tracker row |
 
 ## Transcript format
 
@@ -61,7 +61,7 @@ Walk through the transcript answer-by-answer. For each unit (Q1, Q2, ...):
 2. Read the candidate's answer carefully.
 3. Score each of the 5 dims (1-5) with seniority calibration for Senior/Lead.
 4. Identify any root cause pattern from `_rubrics.md` taxonomy.
-5. Cross-reference `config/story-bank.md` — did the candidate appear to use a story from the bank? Which one? If yes, note for later.
+5. Cross-reference `user/config/story-bank.md` — did the candidate appear to use a story from the bank? Which one? If yes, note for later.
 
 Do NOT skip any unit. Even short answers get scored — a 30-second recruiter answer scores on Structure + Relevance more than Substance, but it still scores.
 
@@ -148,31 +148,31 @@ Print the assembled analysis:
 ## Recommendations
 - Drill: {one specific drill type to run in `practice` next, based on triage priority}
 - Bank work: {if gaps surface — "consider adding a story about X" — point to specific question types the bank didn't cover}
-- Active Strategy update: {if a root cause shifts the dominant bottleneck, propose updating `data/active-strategy.md`}
+- Active Strategy update: {if a root cause shifts the dominant bottleneck, propose updating `user/data/active-strategy.md`}
 ```
 
 ## Step 6: State writes
 
-Append one row to `data/score-history.md`:
+Append one row to `user/data/score-history.md`:
 ```
 {interview-date}	analyze	{company-slug or "unknown"}-{round-type}	{S avg}	{St avg}	{R avg}	{Cr avg}	{D avg}	{Hire Signal}	{root cause}	{brief note}
 ```
 
 For each story the candidate confirms was used (after the "Storybank Updates" prompt):
-- Edit `config/story-bank.md`: increment `Use Count` by 1, set `Last Used` to the interview date (not today, if different).
+- Edit `user/config/story-bank.md`: increment `Use Count` by 1, set `Last Used` to the interview date (not today, if different).
 - If candidate approves a Strength recalibration: edit that field too.
 
-Update `data/revisit-queue.md` if a cross-unit root cause was detected.
+Update `user/data/revisit-queue.md` if a cross-unit root cause was detected.
 
-If `--company` is set, optionally append a "Real Round Notes — {date}" section to `data/interview-prep/{company-slug}-*.md` with the lessons. Ask first.
+If `--company` is set, optionally append a "Real Round Notes — {date}" section to `user/data/interview-prep/{company-slug}-*.md` with the lessons. Ask first.
 
-If `--company` is set and `data/applications.md` has a row for this company, propose updating the Notes field with one-line lessons. Ask first; do not write silently.
+If `--company` is set and `user/data/applications.md` has a row for this company, propose updating the Notes field with one-line lessons. Ask first; do not write silently.
 
 ---
 
 ## Calibration drift (future)
 
-Once `data/score-history.md` has ≥3 rows of `type=analyze` with the same candidate, a drift report becomes possible: practice-mock scores vs. real-interview-analyze scores per dim. **Drift detection is deferred** — too little data right now. When the data exists, this mode can grow a `--drift-report` flag.
+Once `user/data/score-history.md` has ≥3 rows of `type=analyze` with the same candidate, a drift report becomes possible: practice-mock scores vs. real-interview-analyze scores per dim. **Drift detection is deferred** — too little data right now. When the data exists, this mode can grow a `--drift-report` flag.
 
 ## Rules
 

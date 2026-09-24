@@ -1,0 +1,111 @@
+{
+  "basics": {
+    "name": "Your Name",
+    "contactLine": "[your-website.com](https://your-website.com) / [you@example.com](mailto:you@example.com) / [+00 0000000000](tel:+00) / [linkedin.com/in/your-handle](https://www.linkedin.com/in/your-handle/) / City, Country",
+    "summary": "Target role family (e.g. Senior Backend Engineer, Head of Product) with N years of experience. Strongest signature outcome with a real number. The kind of company you have operated in (Seed/Series A/B, scale-up, enterprise). One sentence on what you specialize in."
+  },
+  "skills_inventory": [
+    "Skill One",
+    "Skill Two",
+    "Skill Three",
+    "Skill Four",
+    "Skill Five",
+    "Skill Six"
+  ],
+  "languages_line": "English (fluent), Other Language (level)",
+  "evidence_refs": {},
+  "work": [
+    {
+      "headingRaw": "Role Title - Company Name",
+      "position": "Role Title",
+      "company": "Company Name",
+      "slug": "company-name",
+      "highlights": [
+        {
+          "id": "company-name-b1",
+          "text": "Bullet describing a concrete outcome with a quantified metric (use real numbers; the fact-checker will flag invented ones)"
+        },
+        {
+          "id": "company-name-b2",
+          "text": "Bullet about a capability or methodology you applied; keep it specific to what you actually did"
+        },
+        {
+          "id": "company-name-b3",
+          "text": "Bullet about scope (team size, budget, geography, customers) — anything that signals seniority"
+        },
+        {
+          "id": "company-name-b4",
+          "text": "Bullet about cross-functional or strategic work — partnerships, GTM, platform decisions"
+        }
+      ],
+      "metaRaw": "Month YYYY – Month YYYY (or \"Present\")"
+    },
+    {
+      "headingRaw": "Previous Role Title - Previous Company",
+      "position": "Previous Role Title",
+      "company": "Previous Company",
+      "slug": "previous-company",
+      "highlights": [],
+      "subEntries": [
+        {
+          "headingRaw": "**Sub-role / Promotion** - Month YYYY – Month YYYY",
+          "slug": "previous-company-sub-role-promotion",
+          "highlights": [
+            {
+              "id": "previous-company-sub-role-promotion-b1",
+              "text": "Bullet"
+            },
+            {
+              "id": "previous-company-sub-role-promotion-b2",
+              "text": "Bullet"
+            }
+          ]
+        },
+        {
+          "headingRaw": "**Earlier Sub-role** - Month YYYY – Month YYYY",
+          "slug": "previous-company-earlier-sub-role",
+          "highlights": [
+            {
+              "id": "previous-company-earlier-sub-role-b1",
+              "text": "Bullet"
+            },
+            {
+              "id": "previous-company-earlier-sub-role-b2",
+              "text": "Bullet"
+            }
+          ]
+        }
+      ],
+      "metaRaw": "Month YYYY – Month YYYY"
+    },
+    {
+      "headingRaw": "Older Role - Older Company",
+      "position": "Older Role",
+      "company": "Older Company",
+      "slug": "older-company",
+      "highlights": [
+        {
+          "id": "older-company-b1",
+          "text": "1-2 highly transferable bullets only — older roles get compressed by the generator anyway"
+        }
+      ],
+      "metaRaw": "YYYY – YYYY",
+      "description": "Compact one-line description."
+    },
+    {
+      "headingRaw": "Earliest Role(s) - Various",
+      "position": "Earliest Role(s)",
+      "company": "Various",
+      "slug": "various",
+      "highlights": [],
+      "metaRaw": "YYYY – YYYY",
+      "description": "One-line summary spanning the whole early-career period; name 2-3 notable employers if relevant."
+    }
+  ],
+  "education": [
+    {
+      "institution": "Institution Name, City",
+      "description": "Degree / Diploma — Year (optional)"
+    }
+  ]
+}

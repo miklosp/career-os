@@ -120,8 +120,8 @@ func NewCVModel(t theme.Theme, careerOpsPath string, tabCounts map[string]int, w
 	}
 	cv, err := data.LoadCV(careerOpsPath)
 	if err != nil {
-		m.loadErr = "Could not load config/cv.json: " + err.Error() +
-			"\n\nRun `pnpm cv-migrate` to produce it from config/cv.md."
+		m.loadErr = "Could not load user/config/cv.json: " + err.Error() +
+			"\n\nRun `pnpm cv-migrate` to produce it from user/config/cv.md."
 		return m
 	}
 	m.cv = cv

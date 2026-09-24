@@ -36,7 +36,7 @@
  *                                    -- | recruitee-api | teamtailor-api | join_team-api
  *                                    -- | personio-api | smartrecruiters-api
  *                                    -- | bamboohr-api | breezy-api
- *                                    -- | linkedin-jobspy | remoteineurope | websearch — …
+ *                                    -- | linkedin-jobspy | remoteineurope | …
  *     title      TEXT,
  *     company    TEXT,
  *     status     TEXT NOT NULL DEFAULT 'added'
@@ -47,7 +47,7 @@
  * cannot run JobSpy (no `uv` on PATH, or python-jobspy not installable),
  * this script prints a single line
  *   SCAN_FATAL=jobspy-unavailable
- * BEFORE any DISPATCH_URLS= line. It is non-fatal to the run — Levels 1/2b/3
+ * BEFORE any DISPATCH_URLS= line. It is non-fatal to the run — the other levels
  * still execute and their URLs are still dispatched; only LinkedIn is skipped.
  *
  * Usage:
@@ -76,6 +76,7 @@ import {
   recordOffers,
 } from "./lib/scan-history.mjs";
 import { isBanned } from "./lib/ban-list.mjs";
+import { APPLICATIONS_FILE, CONFIG_DIR, DATA_DIR, JDS_DIR, SCAN_HISTORY_DB } from "./lib/paths.mjs";
 const parseYaml = yaml.load;
 
 // Auto-load .env so FIRECRAWL_API_KEY and the optional LinkedIn cookies
@@ -104,12 +105,12 @@ loadDotenv();
 
 // ── Config ──────────────────────────────────────────────────────────
 
-const PORTALS_PATH = "config/portals.yml";
-const SCAN_HISTORY_DB_PATH = "data/scan-history.db";
-const APPLICATIONS_PATH = "data/applications.md";
+const PORTALS_PATH = resolve(CONFIG_DIR, "portals.yml");
+const SCAN_HISTORY_DB_PATH = SCAN_HISTORY_DB;
+const APPLICATIONS_PATH = APPLICATIONS_FILE;
 
 // Ensure required directories exist (fresh setup)
-mkdirSync("data", { recursive: true });
+mkdirSync(DATA_DIR, { recursive: true });
 
 // ── Fetch tuning ────────────────────────────────────────────────────
 
@@ -562,7 +563,7 @@ async function main() {
 
   // 1. Read config/portals.yml
   if (!existsSync(PORTALS_PATH)) {
-    console.error("Error: config/portals.yml not found. Run onboarding first.");
+    console.error("Error: user/config/portals.yml not found. Run onboarding first.");
     process.exit(1);
   }
 
@@ -676,7 +677,7 @@ async function main() {
   let linkedinUrls = [];
   let linkedinStats = null;
   if (config.linkedin_searches?.length) {
-    const jdsDir = resolve("data/jds");
+    const jdsDir = JDS_DIR;
     mkdirSync(jdsDir, { recursive: true });
     try {
       const result = await runLinkedInScan({
@@ -721,7 +722,7 @@ async function main() {
   let wwrUrls = [];
   let wwrStats = null;
   if (config.weworkremotely_feeds?.length) {
-    const jdsDir = resolve("data/jds");
+    const jdsDir = JDS_DIR;
     mkdirSync(jdsDir, { recursive: true });
     try {
       const result = await runWeWorkRemotelyScan({
@@ -747,7 +748,7 @@ async function main() {
   let pmUrls = [];
   let pmStats = null;
   if (config.remotepmjobs_searches?.length) {
-    const jdsDir = resolve("data/jds");
+    const jdsDir = JDS_DIR;
     mkdirSync(jdsDir, { recursive: true });
     try {
       const result = await runRemotePmJobsScan({
@@ -755,7 +756,7 @@ async function main() {
         portalsCfg: config,
         applicationsPath: APPLICATIONS_PATH,
         jdsDir,
-        profilePath: "config/profile.md",
+        profilePath: resolve(CONFIG_DIR, "profile.md"),
         dryRun,
       });
       pmUrls = result.newUrls;

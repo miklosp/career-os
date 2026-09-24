@@ -6,15 +6,14 @@ Where career-ops discovers job offers: which sources are wired in, what each one
 
 | Source | Level | Helper script | Cost | Notes |
 |---|---|---|---|---|
-| ATS APIs (Greenhouse, Ashby, Lever, Recruitee, Teamtailor, join.team, Personio, SmartRecruiters, BambooHR, Breezy) | 1 | `scan.mjs` (inline) | Free | Real-time, exact, employer-first. Driven by `tracked_companies` in `config/portals.yml`. |
+| ATS APIs (Greenhouse, Ashby, Lever, Recruitee, Teamtailor, join.team, Personio, SmartRecruiters, BambooHR, Breezy) | 1 | `scan.mjs` (inline) | Free | Real-time, exact, employer-first. Driven by `tracked_companies` in `user/config/portals.yml`. |
 | LinkedIn | 2 | `lib/scan-linkedin.mjs` + `lib/scan-jobspy.py` (+ optional `lib/li-voyager.mjs`) | Free | Discovery + full JD text in one pass. JD prefetched, agents skip `modes/_fetch.md`. |
 | remoteineurope.com | 2b | `lib/scan-remoteineurope.mjs` | Free ($0, pure HTTP) | Sitemap + per-page scrape; emits the employer ATS URL. Does NOT prefetch the JD. |
 | We Work Remotely | 2e | `lib/scan-weworkremotely.mjs` | Free | Full-text category RSS; whole JD ships in the feed, so JD is prefetched. |
 | Remote PM Jobs (remotepmjobs.com) | 2f | `lib/scan-remotepmjobs.mjs` | Free | Public MCP server; scan-side geo gate + ATS resolution. PM-only board. |
-| WebSearch | 3 | none (agent-executed inline) | LLM tokens | The only LLM-driven level. Needs a liveness check - see "Aggregator liveness". |
-| Firecrawl | support | `firecrawl` CLI | ~1 credit/scrape | Not a discovery source: the SPA fetch fallback (`modes/_fetch.md` Priority 3) and the first-choice Level 3 liveness prober. |
+| Firecrawl | support | `firecrawl` CLI | ~1 credit/scrape | Not a discovery source: the SPA fetch fallback (`modes/_fetch.md` Priority 3) and the first-choice liveness prober for offer verification. |
 
-Level numbering: integer levels are major source classes (1 = ATS APIs, 2 = LinkedIn, 3 = WebSearch). Aggregator scanners are conceptually a sub-pattern of LinkedIn-style discovery (find URLs, dedup, scrape titles), so they sit under Level 2 with a letter suffix. New aggregators follow the same shape: `lib/scan-{site}.mjs`, called from `scan.mjs`, next free letter. `2c` (hiring.cafe) and `2d` (englishjobs.se) are burnt - see "Rejected sources".
+Level numbering: integer levels are major source classes (1 = ATS APIs, 2 = LinkedIn). Aggregator scanners are conceptually a sub-pattern of LinkedIn-style discovery (find URLs, dedup, scrape titles), so they sit under Level 2 with a letter suffix. New aggregators follow the same shape: `lib/scan-{site}.mjs`, called from `scan.mjs`, next free letter. `2c` (hiring.cafe) and `2d` (englishjobs.se) are burnt - see "Rejected sources".
 
 ### Level 1 - tracked-company ATS APIs
 
@@ -26,7 +25,7 @@ Level 1 stays even where a broader crawler would subsume its mechanism: it is re
 
 Discovery and JD text come from JobSpy (`uv run --with python-jobspy`), spawned by `lib/scan-linkedin.mjs`. The employer ATS URL is a separate problem - see below.
 
-**Filter codes.** `linkedin_searches` entries in `config/portals.yml` carry LinkedIn's own internal `f_*` filter codes (a pasted LinkedIn search URL works as-is; `lib/scan-linkedin.mjs` derives `hours_old` from `f_TPR` and `is_remote` from `f_WT=2`). Keep this reference when editing searches:
+**Filter codes.** `linkedin_searches` entries in `user/config/portals.yml` carry LinkedIn's own internal `f_*` filter codes (a pasted LinkedIn search URL works as-is; `lib/scan-linkedin.mjs` derives `hours_old` from `f_TPR` and `is_remote` from `f_WT=2`). Keep this reference when editing searches:
 
 | Field | Codes |
 |---|---|
@@ -83,9 +82,9 @@ Webflow-hosted aggregator, no native API. `https://remoteineurope.com/sitemap.xm
 
 ### Level 2e - We Work Remotely (integrated 2026-06-08)
 
-Driven by `weworkremotely_feeds` in `config/portals.yml` (seeded with Product and Design category `.rss` URLs).
+Driven by `weworkremotely_feeds` in `user/config/portals.yml` (seeded with Product and Design category `.rss` URLs).
 
-- WWR publishes **full-text** per-category RSS (e.g. `/categories/remote-product-jobs.rss`) - the entire JD ships in each `<item><description>` as entity-encoded HTML. So the JD is prefetched whole into `data/jds/` with a `Fetched` row and the dispatched agent skips `modes/_fetch.md` straight to gate plus score.
+- WWR publishes **full-text** per-category RSS (e.g. `/categories/remote-product-jobs.rss`) - the entire JD ships in each `<item><description>` as entity-encoded HTML. So the JD is prefetched whole into `user/data/jds/` with a `Fetched` row and the dispatched agent skips `modes/_fetch.md` straight to gate plus score.
 - **Passes the employer-identity bar** (unlike englishjobs.se): every item names the company (title prefix `Company: Role`), plus HQ and the employer homepage.
 - **Apply URL is WWR-internal** (`weworkremotely.com/remote-jobs/{slug}`), never the employer ATS. Resolution defers to apply-time, same as LinkedIn without Voyager. The WWR detail page is the canonical URL stored and dispatched.
 - **Category buckets are noisy** - a "product" feed contained sales and engineering roles. The global `title_filter` is what cuts it; do not try to fix this with feed selection.
@@ -93,7 +92,7 @@ Driven by `weworkremotely_feeds` in `config/portals.yml` (seeded with Product an
 
 ### Level 2f - Remote PM Jobs (integrated 2026-06-08)
 
-Driven by `remotepmjobs_searches` in `config/portals.yml`. PM-only board - design-leadership roles never appear here, those stay with WWR and LinkedIn.
+Driven by `remotepmjobs_searches` in `user/config/portals.yml`. PM-only board - design-leadership roles never appear here, those stay with WWR and LinkedIn.
 
 remotepmjobs.com exposes a **public, auth-free, CORS-open, stateless MCP server at `https://remotepmjobs.com/api/mcp`** (streamable HTTP). It is called as plain JSON-RPC POST (`tools/call` to `search_jobs` / `get_job` / `list_filters`) - no MCP client library, no session handshake. The server's own `instructions` field explicitly invites programmatic use.
 
@@ -102,17 +101,13 @@ Hard-won gotchas, all tested - do not re-investigate:
 - **The `seniority` structured filter is BROKEN.** It always times out, at any value or limit. Use the semantic `query` filter instead, **one clean title phrase per entry**: multi-term queries match nothing ("AI Product Manager" works; "Head of Product VP Product Director" returns 0).
 - **The endpoint throttles bursts.** Roughly 15 rapid calls produce sustained timeouts. `mcpCall` retries 3x on transient/5xx; `get_job` concurrency is 3. Coverage accumulates across daily runs, like LinkedIn. A failed `get_job` is dropped rather than recorded, so it is retried next run.
 - **`get_job` returns no verbatim JD body** - only `rolePitch`, plus rich `enrichment` (requiredSkills, niceToHaveSkills, aiNativeSignals, yearsExperienceMin, geoRestriction, company industry/size/funding). The prefetched JD links to `canonicalUrl` for the full text. There is **no apply-URL field anywhere** in the MCP response.
-- **Scan-side geo gate (added 2026-06-09).** `get_job`'s structured `enrichment.locationEligibleRegions` (`["us"]` / `["worldwide"]` / `["emea"]`) and `locationEligibleLocales` (ISO codes - a Sweden role lists `"SE"`) are the reliable signal, gated against `config/profile.md` `location_policy` so the US/Canada flood is dropped at the source and never fetched, scored, or skipped downstream. A cheap free-text pre-gate on the search-result `geoRestriction` skips obvious-US before `get_job`; the structured gate is authoritative; ambiguous cases (null / "Remote" / unspecified) fall through to the downstream location gate. Real-world: about 29 of 40 dropped on a broad PM query.
+- **Scan-side geo gate (added 2026-06-09).** `get_job`'s structured `enrichment.locationEligibleRegions` (`["us"]` / `["worldwide"]` / `["emea"]`) and `locationEligibleLocales` (ISO codes - a Sweden role lists `"SE"`) are the reliable signal, gated against `user/config/profile.md` `location_policy` so the US/Canada flood is dropped at the source and never fetched, scored, or skipped downstream. A cheap free-text pre-gate on the search-result `geoRestriction` skips obvious-US before `get_job`; the structured gate is authoritative; ambiguous cases (null / "Remote" / unspecified) fall through to the downstream location gate. Real-world: about 29 of 40 dropped on a broad PM query.
 - **The `geoRestriction` source filter is exact-match on messy free text** (~250 distinct strings: city names, timezones, country lists), not a clean region enum. Arrays are ignored (they return the whole dataset), `"Worldwide"` returns 0 (the actual value is `"Anywhere in the World"`). Single exact values do work (`"EMEA"` 13, `"Europe"` 22, `"Sweden"` 5) but are brittle - do not rely on it as the geo filter, use the structured gate.
 - **ATS resolution (added 2026-06-09).** The canonical page embeds the Apply button as the outbound link tagged `utm_source=remotepmjobs.com...utm_campaign=apply`. Regex it out, strip the utm params (keep meaningful query such as `?gh_jid=`) and you get the real employer ATS URL (Greenhouse / Ashby / Workday / own careers; close to 100% hit rate). That becomes the JD's `**URL:**` / `**Apply page:**`; the remotepmjobs canonical moves to a `**Source:**` line. `lib/fetch-jd.mjs` has a `**Source:** {inputCanonical}` dedup fallback so a dispatched or pasted remotepmjobs URL still resolves on disk. **Dispatch and scan-history dedup stay keyed on the remotepmjobs canonical** - `search_jobs` only ever returns that.
 
-### Level 3 - WebSearch
-
-The only agent-executed level, bounded by `enabled: true` entries under `search_queries` in `config/portals.yml`. Results can be weeks stale, so liveness must be verified before dispatch - and verified correctly, see the next section.
-
 ### Firecrawl (fetch and verify support, not discovery)
 
-`FIRECRAWL_API_KEY` lives in the gitignored `/Users/miklos/Code/career-ops/.env` alongside `BIFROST_*`. Source it before calling:
+`FIRECRAWL_API_KEY` lives in the gitignored `.env` at the repo root alongside `BIFROST_*`. Source it before calling:
 
 ```bash
 set -a; source .env; set +a
@@ -127,7 +122,7 @@ firecrawl scrape "{url}" -o /tmp/fc-{NUM}.md
 
 ## Aggregator liveness
 
-**Aggregator repost pages stay live long after the employer closes the requisition.** Jobgether, Remotive, Himalayas and euremotejobs all do this. Level 3 liveness checks must resolve to the **employer's own ATS URL first**, then verify - never verify the aggregator page.
+**Aggregator repost pages stay live long after the employer closes the requisition.** Jobgether, Remotive, Himalayas and euremotejobs all do this. Any liveness check on an aggregator URL must resolve to the **employer's own ATS URL first**, then verify - never verify the aggregator page.
 
 Measured on the 2026-07-31 scan: 2 false positives out of 14 "live" verdicts.
 
@@ -137,7 +132,7 @@ Measured on the 2026-07-31 scan: 2 false positives out of 14 "live" verdicts.
 
 Why the byte-count plus dead-phrase heuristic in `modes/scan.md` misses these: aggregator shells are large enough to clear the "under ~300 chars = footer only" test and carry no "no longer available" string. That classifier is only safe on employer ATS pages.
 
-**How to apply:** in Level 3, extract the APPLY href from the scraped aggregator markdown (it carries the employer ATS URL), then feed *that* to `lib/prep-jds.mjs` - its dedup and fetch handlers settle liveness for free. This also skips the solo-agent cost: on that run it turned 7 would-be solo agents into one zero-token prep call.
+**How to apply:** extract the APPLY href from the scraped aggregator markdown (it carries the employer ATS URL), then feed *that* to `lib/prep-jds.mjs` - its dedup and fetch handlers settle liveness for free. This also skips the solo-agent cost: on that run it turned 7 would-be solo agents into one zero-token prep call.
 
 **Aggregator hosts must never get a `lib/ats-registry.json` entry.** They are multi-employer, so a host-to-handler mapping would misroute every other employer's posting.
 
@@ -214,7 +209,7 @@ The SSR scheme itself never broke (`__NEXT_DATA__` to `props.pageProps.ssrHits` 
 
 **Yield is a trickle, not a firehose.** Measured on one day's delta of 173,843 added rows: 767 pass `title_filter`, 96 EU, **1 EU leadership role, 0 Sweden**. Roughly 30 EU leadership roles per month from untracked employers. Scope any integration to leadership seniority only - the senior-PM tier (36 EU per day) would swamp the eval budget.
 
-**Overlap:** 95% novel against `data/scan-history.db` (47 of 925 URLs already seen). It largely subsumes Level 1's *mechanism* across 75k boards versus our 51, but at roughly one day's latency versus Level 1's real-time exactness - so **Level 1 stays**; open-jobs' value is strictly the long tail of employers we would never think to add.
+**Overlap:** 95% novel against `user/data/scan-history.db` (47 of 925 URLs already seen). It largely subsumes Level 1's *mechanism* across 75k boards versus our 51, but at roughly one day's latency versus Level 1's real-time exactness - so **Level 1 stays**; open-jobs' value is strictly the long tail of employers we would never think to add.
 
 **Risks:** bus factor 1 (279 of 282 commits from one person, 0 releases, high daily churn, README explicitly declines an uptime commitment). The `dark` tier includes recruitment agencies posing as employers, and the `staffing` flag is populated on only 42% of rows, so the ban list would need to grow. Job-level enrichment is 1.9% populated, so all geo and seniority gating must be ours, locally, on title and location strings.
 

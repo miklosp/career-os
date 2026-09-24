@@ -1,25 +1,26 @@
 # CV Pipeline
 
 Subsystem map for everything CV-related in `lib/`. One canonical source
-(`config/cv.json`), two generation paths (deterministic projection and
-LLM-tailored rewrite), one closed-world evidence contract enforced across both.
+(`user/config/cv.json`), two generation paths (deterministic projection and
+a per-JD rewrite drafted in the interactive tailor session), one closed-world
+evidence contract enforced across both.
 
 ## The two paths
 
 ```
-                            config/cv.json            (canonical, JSON Resume superset)
+                            user/config/cv.json            (canonical, JSON Resume superset)
                                   │
                 ┌─────────────────┴─────────────────┐
                 ▼                                   ▼
     ┌────────────────────────┐         ┌────────────────────────────┐
-    │ Deterministic          │         │ LLM-tailored               │
-    │ cv-project.mjs         │         │ generate-cv-llm.mjs        │
-    │ (zero-token; subset    │         │ (Opus via Bifrost; rewrites│
-    │  of cv.json — source-  │         │  against a specific JD)    │
-    │  true by construction) │         │            │               │
-    └──────────┬─────────────┘         │            ▼               │
+    │ Deterministic          │         │ Tailored (modes/tailor.md) │
+    │ cv-project.mjs         │         │ cv-draft.mjs context       │
+    │ (zero-token; subset    │         │   → session drafts against │
+    │  of cv.json — source-  │         │     a specific JD          │
+    │  true by construction) │         │   → cv-draft.mjs finalize  │
+    └──────────┬─────────────┘         │            │               │
                │                       │   cv-validate.mjs          │
-               │                       │   (Rules A/B/C/D —         │
+               │                       │   (Rules A/B/C/D/L —       │
                │                       │    hard-fail closed-world) │
                │                       │            │               │
                │                       │            ▼               │
@@ -33,12 +34,12 @@ LLM-tailored rewrite), one closed-world evidence contract enforced across both.
 ```
 
 The deterministic path is the safe default for *unsupervised* artifacts. The
-LLM path is for *supervised* per-application tailoring, where you review every
-finding before the PDF renders.
+tailored path is for *supervised* per-application tailoring, where you review
+every finding before the PDF renders.
 
 ## Canonical data
 
-`config/cv.json` is a [JSON Resume](https://jsonresume.org) v1.0.0 *superset* —
+`user/config/cv.json` is a [JSON Resume](https://jsonresume.org) v1.0.0 *superset* —
 themes are deliberately unused; the project renders it itself, so the schema
 extends freely. The fields specific to this pipeline:
 
@@ -55,7 +56,7 @@ Each highlight:
 
 ```jsonc
 {
-  "id": "secberus-b3",             // stable across edits; never reassigned by index
+  "id": "acme-b3",             // stable across edits; never reassigned by index
   "text": "Co-created GTM strategy with C-suite ...",
   "tier": "core",                  // optional, JSON-only authored metadata
   "archetypes": ["product"]        // optional, JSON-only authored metadata
@@ -74,8 +75,8 @@ derivable; see [Authored metadata preservation](#authored-metadata-preservation)
 | `cv-md-to-json.mjs` (`pnpm cv-migrate`) | Markdown → JSON. Re-parses `cv.md`, recomputes `evidence_refs`, **merges authored `tier`/`archetypes` from the prior `cv.json` by stable id** so prose edits never wipe prioritization. |
 | `cv-json-to-md.mjs` (`pnpm cv-build`, `pnpm cv-check`) | JSON → derived markdown view (identity projected from `profile.md`). `--annotate-ids --stdout` emits the id-annotated source view used by the generator/validator. `--check` is the round-trip gate. |
 | `cv-project.mjs` (`pnpm cv-project`) | Deterministic projection: filters highlights by `--tier`, `--archetype`, `--budget`; prunes empty roles; emits projected `cv.json` or derived markdown. Zero tokens. |
-| `generate-cv-llm.mjs` (`pnpm cv-llm`) | Per-JD tailored rewrite. Opus reads `cv.json` (id-annotated), confirmed `notes.yml`, `story-bank.md`, and the latest `data/reports/{NUM}-*.md`. Every output bullet must end `[src: id]`; Summary ends a composite `[src: …]`. |
-| `cv-validate.mjs` | Hard-fail validator: Rule A (every bullet has `[src: id]`), B (≥0.12 token overlap with cited source — soft flag for the judge), C (high-risk entities present in cited source), D (Core Competencies ⊆ `skills_inventory ∪ aliases.yml`). On fail, retries the generator with a `<failed_constraints>` diff (max 2) then surfaces — never auto-revises. |
+| `cv-draft.mjs` (`pnpm cv-draft`) | Deterministic bookends of the in-session draft. `context {NUM}` prints `prompts/ats-prompt.md` filled with the id-annotated `cv.json`, confirmed `notes.yml`, `story-bank.md`, the latest `user/data/reports/{NUM}-*.md`, and the JD, plus the draft path. `finalize {draft}` extracts `<bridges>`/`<gaps>`, runs `cv-validate.mjs`, strips `[src:]` tags, projects everything but Summary / competency selection / bullets from `profile.md` + `cv.json`, normalizes ATS unicode, and writes `{NUM}-{slug}-cv.md` + `-trace.json`. |
+| `cv-validate.mjs` | Hard-fail validator: Rule A (every bullet has `[src: id]`), B (every cited id resolves), C (high-risk entities present in cited source; <0.12 token overlap is a soft flag for the judge), D (Core Competencies ⊆ `skills_inventory ∪ aliases.yml`), L (Summary ≤ 85 words, bullets ≤ 25 words, one `[src: id]` per bullet). On fail, `cv-draft.mjs finalize` prints the `<failed_constraints>` block and exits non-zero; the session fixes the draft and reruns. Never auto-revises. |
 | `cv-fact-check.mjs` (`pnpm fact-check`) | Review pass: two parallel calls — ATS criteria simulation (CV text only; `REVIEW_MODEL`, same family as Ashby's evaluator) + citation-grounded fact-check (`FACTCHECK_MODEL`, a third model family). Computes met/total and expected×verdict deviations in Node; merges both into the review JSON consumed by the dashboard walkthrough. Independent control from the validator. |
 | `cv-status.mjs` | Deterministic, zero-token CV health check used by `modes/cv.md`. File presence, coverage, quantification, tier/archetype distribution, story-bank gaps, keyword-aggregation eligibility, integrity. Composite score + prioritized next actions. |
 | `keyword-frequency.mjs` (`pnpm kw-analysis`) | Cross-report keyword aggregation with `--min-score` weighting and `strong/partial/gap` coverage classification. Advisory input to `modes/cv.md` — never the selection authority. |
@@ -103,25 +104,34 @@ Selection rules:
   `default` then `depth` in original order until `N` is reached; preserves
   original bullet order in the output.
 
-## The LLM-tailored path
+## The tailored path
 
-Same canonical input, JD-aware rewrite. The generator gets:
+Same canonical input, JD-aware rewrite, drafted by the interactive tailor
+session (`modes/tailor.md`) — no generator API call. One
+`node lib/cv-draft.mjs context {NUM}` call gives the session:
 
 - The **id-annotated** CV (`cv-json-to-md.mjs --annotate-ids --stdout`)
-- Confirmed `config/notes.yml` (`n#` ids)
-- `config/story-bank.md` (`S0xx` ids)
-- The latest `data/reports/{NUM}-*-{date}.md` (Block-A Match ids are valid `[src:]`
+- Confirmed `user/config/notes.yml` (`n#` ids)
+- `user/config/story-bank.md` (`S0xx` ids)
+- The latest `user/data/reports/{NUM}-*-{date}.md` (Block-A Match ids are valid `[src:]`
   targets; Block-A Gaps are forbidden)
+- The JD (`user/data/jds/{NUM}-*.md`) — wording only, never evidence
+- The contract itself (`prompts/ats-prompt.md`) and the draft path to write
 
 **Closed-world evidence**: every emitted bullet's `[src: id]` must point at a
 real `cv.json` bullet id, story-bank id, confirmed note, or Block-A match. The
 Summary ends a composite `[src: …]`. Core Competencies is closed-world over
-`cv.json.skills_inventory ∪ config/aliases.yml`. The validator hard-fails any
-violation; on fail it retries the generator with a `<failed_constraints>` block
-(max 2) then **surfaces** (non-zero exit) — it never auto-revises silently.
+`cv.json.skills_inventory ∪ user/config/aliases.yml`. The validator hard-fails any
+violation: `cv-draft.mjs finalize` prints the `<failed_constraints>` block,
+exits non-zero, and writes nothing. The session fixes the draft in front of the
+user and reruns until it passes (no retry cap). On pass, only the Summary, the
+competency selection, and the bullets survive from the draft; identity comes
+from `profile.md`, and the headline, role and sub-entry headings, dates
+(including `subEntries[].dateRange`), meta lines, descriptions, languages, and
+education come from `cv.json`.
 
 Bridges (CV↔JD vocabulary substitutions) are traced in
-`output/customized-cvs/{NUM}-{slug}-trace.json` and consumed by the judge. The
+`user/output/customized-cvs/{NUM}-{slug}-trace.json` and consumed by the judge. The
 judge's Stage-A simulation scores the CV against the report's Criteria ledger
 (report-only — it never injects text into the CV).
 
@@ -160,7 +170,7 @@ disk" to "as good as it gets":
 ## Onboarding → optimal
 
 ```
-templates/cv.example.md  →  config/cv.md  →  pnpm cv-migrate  →  config/cv.json
+user-template/config/cv.md → user/config/cv.md  → pnpm cv-migrate  →  user/config/cv.json
                                                                        │
                                                               /career-ops cv
                                                                        │
@@ -168,7 +178,7 @@ templates/cv.example.md  →  config/cv.md  →  pnpm cv-migrate  →  config/cv
                                                                        │
                                             ───────────────┴───────────────
                                             ▼                             ▼
-                                     pnpm cv-project           generate-cv-llm
+                                     pnpm cv-project           /career-ops tailor
                                      (generic CV out)          (per-JD, supervised)
 ```
 

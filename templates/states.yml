@@ -66,3 +66,12 @@ states:
     aliases: [no_aplicar, no aplicar, skip, monitor]
     description: Doesn't fit, don't apply
     dashboard_group: skip
+
+# Outcome columns in applications.md, after Notes:
+#   | Applied Date | Channel | Furthest Stage | Rejection Reason |
+# Applied Date is YYYY-MM-DD; Rejection Reason is free text. Empty = not
+# recorded. Furthest Stage only moves forward — a terminal status (Rejected,
+# Discarded) never clears it. Stage order below is furthest-last.
+outcome:
+  channel: [cold-ats, referral, recruiter, exec-search, outreach]
+  furthest_stage: [none, screen, assessment, hm, panel, final, offer]

@@ -6,8 +6,9 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
+
+	"career-ops/dashboard/internal/paths"
 )
 
 // CV is the in-memory editable mirror of config/cv.json.
@@ -125,7 +126,7 @@ func (b *CVBullet) HasArchetype(name string) bool {
 // error when the file is missing or malformed — the screen falls back to an
 // onboarding prompt in that case.
 func LoadCV(careerOpsPath string) (*CV, error) {
-	p := filepath.Join(careerOpsPath, "config", "cv.json")
+	p := paths.Config(careerOpsPath, "cv.json")
 	raw, err := os.ReadFile(p)
 	if err != nil {
 		return nil, err
@@ -177,7 +178,7 @@ func roleLabelOf(w *cvWork) string {
 	}
 }
 
-// stripBoldMarkers turns "**Botkube** - AI-powered ..." into "Botkube - AI-powered ..."
+// stripBoldMarkers turns "**Globex** - AI-powered ..." into "Globex - AI-powered ..."
 // for human-readable sub-entry labels.
 func stripBoldMarkers(s string) string {
 	return strings.ReplaceAll(strings.TrimSpace(s), "**", "")

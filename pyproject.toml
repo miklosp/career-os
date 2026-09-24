@@ -1,7 +1,7 @@
 [project]
 name = "career-ops-cv"
 version = "0.1.0"
-description = "CV rendering via WeasyPrint (used by lib/generate-cv-llm.mjs)"
+description = "CV rendering via WeasyPrint (used by the tailor mode and the dashboard)"
 requires-python = ">=3.11"
 dependencies = [
     "weasyprint>=62",

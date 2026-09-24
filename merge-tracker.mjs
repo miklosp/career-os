@@ -15,6 +15,11 @@
  * a new row if somehow the fetch row went missing), dedups by NUM +
  * company+role, and archives the consumed TSVs.
  *
+ * The four outcome columns after Notes (Applied Date, Channel, Furthest Stage,
+ * Rejection Reason) are never in a TSV — they are set in place at apply time or
+ * by the user. Promotion and re-eval carry the existing row's values over
+ * verbatim; new rows get them empty.
+ *
  * Run: node career-ops/merge-tracker.mjs [--dry-run] [--verify]
  */
 
@@ -29,19 +34,17 @@ import {
 import { join, basename, dirname } from "path";
 import { fileURLToPath } from "url";
 import { execFileSync } from "child_process";
+import { APPLICATIONS_FILE, DATA_DIR, TRACKER_ADDITIONS_DIR } from "./lib/paths.mjs";
 
 const CAREER_OPS = dirname(fileURLToPath(import.meta.url));
-// Support both layouts: data/applications.md (boilerplate) and applications.md (original)
-const APPS_FILE = existsSync(join(CAREER_OPS, "data/applications.md"))
-  ? join(CAREER_OPS, "data/applications.md")
-  : join(CAREER_OPS, "applications.md");
-const ADDITIONS_DIR = join(CAREER_OPS, "data/tracker-additions");
+const APPS_FILE = APPLICATIONS_FILE;
+const ADDITIONS_DIR = TRACKER_ADDITIONS_DIR;
 const MERGED_DIR = join(ADDITIONS_DIR, "merged");
 const DRY_RUN = process.argv.includes("--dry-run");
 const VERIFY = process.argv.includes("--verify");
 
 // Ensure required directories exist (fresh setup)
-mkdirSync(join(CAREER_OPS, "data"), { recursive: true });
+mkdirSync(DATA_DIR, { recursive: true });
 mkdirSync(ADDITIONS_DIR, { recursive: true });
 
 // Canonical states and aliases
@@ -158,6 +161,8 @@ function parseAppLine(line) {
     pdf: parts[7],
     report: parts[8],
     notes: parts[9] || "",
+    // Outcome columns (10–13); a legacy 9-column row yields empty strings.
+    outcome: [10, 11, 12, 13].map((i) => parts[i] ?? ""),
     raw: line,
   };
 }
@@ -373,7 +378,7 @@ for (const file of tsvFiles) {
       );
       const lineIdx = appLines.indexOf(duplicate.raw);
       if (lineIdx >= 0) {
-        const updatedLine = `| ${duplicate.num} | ${addition.date} | ${sanitizeCell(addition.company)} | ${sanitizeCell(addition.role)} | ${addition.score} | ${nextStatus} | ${duplicate.pdf} | ${addition.report} | ${sanitizeCell(note)} |`;
+        const updatedLine = `| ${duplicate.num} | ${addition.date} | ${sanitizeCell(addition.company)} | ${sanitizeCell(addition.role)} | ${addition.score} | ${nextStatus} | ${duplicate.pdf} | ${addition.report} | ${sanitizeCell(note)} | ${duplicate.outcome.join(" | ")} |`;
         appLines[lineIdx] = updatedLine;
         updated++;
       }
@@ -391,7 +396,7 @@ for (const file of tsvFiles) {
     takenNums.add(entryNum);
     if (entryNum > maxNum) maxNum = entryNum;
 
-    const newLine = `| ${entryNum} | ${addition.date} | ${sanitizeCell(addition.company)} | ${sanitizeCell(addition.role)} | ${addition.score} | ${addition.status} | ${addition.pdf} | ${addition.report} | ${sanitizeCell(addition.notes)} |`;
+    const newLine = `| ${entryNum} | ${addition.date} | ${sanitizeCell(addition.company)} | ${sanitizeCell(addition.role)} | ${addition.score} | ${addition.status} | ${addition.pdf} | ${addition.report} | ${sanitizeCell(addition.notes)} |  |  |  |  |`;
     newLines.push(newLine);
     added++;
     console.log(

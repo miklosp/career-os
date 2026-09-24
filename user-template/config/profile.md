@@ -1,9 +1,9 @@
 ---
 # Career-Ops Profile — single source of truth for your personal data.
-# Copy this file to config/profile.md and fill it in.
+# Fill this in with your details.
 #
 # Frontmatter holds the two structured contracts the system parses:
-#   candidate       → lib/generate-cv-llm.mjs (CV identity header)
+#   candidate       → lib/cv-draft.mjs (CV identity header)
 #   location_policy  → modes/_location-gate.md (per-JD skip gate)
 # Everything else (archetypes, narrative, voice, scoring) is the markdown body.
 candidate:
@@ -61,7 +61,7 @@ location_policy:
 # User Profile Context — career-ops (Jane Smith)
 
 <!-- THIS FILE IS YOURS. The body is never auto-updated. Coaching session state
-     lives in data/active-strategy.md, not here. -->
+     lives in user/data/active-strategy.md, not here. -->
 
 ## Target Roles & Archetypes
 

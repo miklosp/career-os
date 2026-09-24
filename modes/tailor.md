@@ -8,11 +8,12 @@ the step `apply` points you to when a role has no reviewed CV yet. This is the
 never part of the background pipeline). Often runs inside a cmux workspace
 launched from the dashboard `t` key.
 
-The provenance contract is CLAUDE.md → **CV Generation → Fact-Check**: a
-generator under a `[src: id]` closed-world contract, a deterministic validator,
-and two independent reviewers (ATS simulation + cross-family fact-check, one
-merged review JSON). Those are the scripts below — this mode orchestrates them
-and the human decisions between them. Two rules carry the whole flow: **never
+The provenance contract is CLAUDE.md → **CV Generation → Fact-Check**: this
+session drafts the CV under the `[src: id]` closed-world contract, a
+deterministic finalize + validator checks it, and two independent reviewers
+(ATS simulation + cross-family fact-check, one merged review JSON) review it.
+This mode is the drafter and orchestrates the scripts and the human decisions
+between them. Two rules carry the whole flow: **never
 auto-revise from reviewer output** (the user applies fixes, the reviewer only
 surfaces), and **fixes are edits, not regenerations** — regenerate only on an
 explicit user request, at most once.
@@ -21,9 +22,9 @@ explicit user request, at most once.
 
 Resolve the argument to a single **NUM**, then locate:
 
-- **JD** — glob `data/jds/{NUM}-*.md`.
-- **Report** — newest `data/reports/{NUM}-*.md` by mtime.
-- **Row** — the `| {NUM} |` line in `data/applications.md` (company, role, score, status, PDF cell).
+- **JD** — glob `user/data/jds/{NUM}-*.md`.
+- **Report** — newest `user/data/reports/{NUM}-*.md` by mtime.
+- **Row** — the `| {NUM} |` line in `user/data/applications.md` (company, role, score, status, PDF cell).
 
 A URL resolves by matching the report/JD `**URL:**` header or the applications.md
 row; a company name resolves by matching the row. If NUM is ambiguous, ask.
@@ -53,8 +54,8 @@ gaps as options (**max 4 per call**; a second call only if there are more than 4
 gaps). For each gap the user selects, let them dictate the evidence
 conversationally, then:
 
-1. **Append** to `config/notes.yml` (schema: `templates/notes.example.yml`) a
-   `{claim, supporting_detail, source_type: "elicited", confirmed: true}` entry.
+1. **Append** to `user/config/notes.yml` (schema: header of
+   `user-template/config/notes.yml`) a `{claim, supporting_detail, source_type: "elicited", confirmed: true}` entry.
    Note ids are positional (`n1`, `n2`, … in list order) and the generator cites
    them by position — **append only, never reorder**, so existing ids stay stable.
 2. **Update the report Criteria line** for that gap: `[gap]` → `[evidenced] … —
@@ -66,26 +67,54 @@ If dictated evidence is a full STAR-shaped story, offer
 `/career-ops storybank add` — but the default sink is `notes.yml`; the story bank
 stays small and curated.
 
-## Step 3 — Generate
+## Step 3 — Draft & finalize
+
+**3a. Load every input in one call:**
 
 ```bash
-node lib/generate-cv-llm.mjs --jd {the data/jds/{NUM}-*.md path from Step 0} --no-pdf
+node lib/cv-draft.mjs context {NUM}
 ```
 
-The generator derives NUM + slug from the JD filename/heading and **prints** the
-output `.md` path — use that path downstream (the CV slug is heading-derived and
-may differ from the JD filename; if you need to re-find it, glob the newest
-`output/customized-cvs/{NUM}-*-cv.md`). A **non-zero exit is a validator
-hard-fail**: surface the printed `<failed_constraints>` findings verbatim and
-stop. Never hand-fix the CV to get past the validator — that is the contract.
+It prints the JD / report paths, the **draft path** to write
+(`user/output/customized-cvs/{NUM}-{slug}-cv-draft.md`; the slug is derived from
+the JD heading), the finalize command, a stale-report warning if the JD is newer
+than the report, and `lib/prompts/ats-prompt.md` with every input filled in
+(id-annotated CV, the report incl. notes added in Step 2, story bank, notes with
+`n#` ids, writing standards, JD). Don't re-read those files.
+
+**3b. Draft.** Follow the printed contract exactly: it is the generator prompt,
+and you are the generator. Write the three-part output (CV markdown with
+`[src: id]` on every bullet and a composite `[src: …]` ending the Summary,
+then `<bridges>` JSON, then `<gaps>` JSON) to the draft path with **Write**.
+No commentary in the file. Copy role and sub-entry headings verbatim from the
+source CV: finalize matches them against `cv.json` and projects the dates,
+meta lines, and descriptions itself.
+
+**3c. Finalize:**
+
+```bash
+node lib/cv-draft.mjs finalize user/output/customized-cvs/{NUM}-{slug}-cv-draft.md
+```
+
+- **Exit 0** → it printed the `-cv.md` and `-trace.json` paths and deleted the
+  draft; use that `.md` path downstream. Soft flags it prints are for the reviewer, not blockers.
+- **Non-zero** → nothing was written. Show the user the printed
+  `<failed_constraints>` (or unmatched-heading) findings, fix each in the draft
+  the way the block says (cite the right existing id, rephrase to what the cited
+  source supports, split, cut, or move the claim to `<bridges>`/`<gaps>`), tell
+  the user what you changed, and rerun finalize. Repeat until it passes. Never
+  invent an id or weaken the contract to get past the validator.
+
+Finalize overwrites `{NUM}-{slug}-cv.md`, so it belongs to this step only: once
+Step 4 has run, CV changes are Edit-tool splices on the `.md`.
 
 ## Step 4 — Review
 
 ```bash
-node lib/cv-fact-check.mjs --review-only output/customized-cvs/{NUM}-{slug}-cv.md
+node lib/cv-fact-check.mjs --review-only user/output/customized-cvs/{NUM}-{slug}-cv.md
 ```
 
-Then read `output/customized-cvs/{NUM}-{slug}-cv-review.json`. It carries
+Then read `user/output/customized-cvs/{NUM}-{slug}-cv-review.json`. It carries
 `findings` (each `{severity, generated_text, replacement, source_type,
 unusable}`) and `simulation` (`criteria` with per-criterion `expected`/`verdict`,
 plus Node-computed `deviations`, each `{type, criterion}`).
@@ -129,10 +158,11 @@ other line, risking new leaks in text the user already reviewed. For each new
 what the note supports, get a yes, splice with Edit. Plain-ASCII punctuation,
 same as Step 5.
 
-Regenerate (Step 3 → Step 4 again) **only if the user explicitly asks** — the
+Redraft (Step 3 → Step 4 again) **only if the user explicitly asks** — the
 escape hatch for when the ledger changed so much the CV's whole shape is wrong.
-Then walk only the **new** findings (diff against already-actioned ones by
-`generated_text`), and never regenerate a second time.
+Rerun `context` first so the new notes are in the inputs. Then walk only the
+**new** findings (diff against already-actioned ones by `generated_text`), and
+never redraft a second time.
 
 ## Step 7 — PDF & close out
 
@@ -140,8 +170,8 @@ Render (a4 default; `--format letter` only for US-market roles):
 
 ```bash
 uv run --project . render-cv-pdf.py \
-  --in  output/customized-cvs/{NUM}-{slug}-cv.md \
-  --out output/customized-cvs/{NUM}-{slug}-cv.pdf \
+  --in  user/output/customized-cvs/{NUM}-{slug}-cv.md \
+  --out user/output/customized-cvs/{NUM}-{slug}-cv.pdf \
   --css style/cv-template.css --format a4
 ```
 
@@ -171,8 +201,8 @@ context so the user decides from facts on screen.
 
 ## Cost & pacing
 
-Typical run is 1 generation (Opus) + 2 parallel review calls (ATS simulation on
-`REVIEW_MODEL`, fact-check on `FACTCHECK_MODEL`); an explicit user-requested
-regeneration doubles that, once, worst case. Batch `AskUserQuestion` into groups
+Typical run is one in-session draft + 2 parallel review calls (ATS simulation
+on `REVIEW_MODEL`, fact-check on `FACTCHECK_MODEL`); an explicit user-requested
+redraft doubles that, once, worst case. Batch `AskUserQuestion` into groups
 of ≤4. Don't ask what a file already answers: read the report, the review JSON,
 and `notes.yml` before prompting.

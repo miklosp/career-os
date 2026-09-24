@@ -28,7 +28,7 @@ Determine the mode from `{{mode}}`:
 | `practice` (optional `--type ...`, `--story S0XX`) | `practice` |
 | `mock` (optional `--company ...`, `--round-type ...`, `--length ...`) | `mock` |
 | `analyze --transcript {path}` (optional `--company ...`) | `analyze` |
-| `onboarding` | `onboarding` -- first-run setup (also auto-triggered when a required config file is missing; see `CLAUDE.md`) |
+| `onboarding` | `onboarding` -- first-run setup (also auto-triggered when `user/` is missing or still holds template placeholders; see `CLAUDE.md`) |
 
 **Auto-pipeline detection:** If `{{mode}}` is not a known sub-command, treat it as input to the pipeline:
 

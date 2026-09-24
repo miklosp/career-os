@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"career-ops/dashboard/internal/model"
+	"career-ops/dashboard/internal/paths"
 
 	_ "modernc.org/sqlite"
 )
@@ -23,20 +24,17 @@ var (
 	reLocation   = regexp.MustCompile(`(?mi)^\*\*Location:\*\*\s*(.+)`)
 	reReportURL  = regexp.MustCompile(`(?m)^\*\*URL:\*\*\s*(https?://\S+)`)
 	reBatchID    = regexp.MustCompile(`(?m)^\*\*Batch ID:\*\*\s*(\d+)`)
+	// reSweden matches a Location value naming Sweden, a Swedish city, or the
+	// ISO code as a trailing segment ("Stockholm, SE"). Letter boundaries, not
+	// \b, so non-ASCII names (Malmö, Göteborg) match whole.
+	reSweden = regexp.MustCompile(`(?i)(?:^|[^\p{L}])(?:sweden|sverige|stockholm|gothenburg|göteborg|goteborg|malmö|malmo|uppsala|solna|sundbyberg|kista|lund|linköping|linkoping|västerås|vasteras|örebro|orebro|helsingborg|norrköping|norrkoping|jönköping|jonkoping|umeå|umea)(?:[^\p{L}]|$)|(?-i:,\s*SE)(?:[^\p{L}]|$)`)
 )
 
-// ParseApplications reads applications.md and returns parsed applications.
-// It tries both {path}/applications.md and {path}/data/applications.md for compatibility.
+// ParseApplications reads the user-data applications.md and returns parsed applications.
 func ParseApplications(careerOpsPath string) []model.CareerApplication {
-	filePath := filepath.Join(careerOpsPath, "applications.md")
-	content, err := os.ReadFile(filePath)
+	content, err := os.ReadFile(paths.Data(careerOpsPath, "applications.md"))
 	if err != nil {
-		// Fallback: try data/ subdirectory
-		filePath = filepath.Join(careerOpsPath, "data", "applications.md")
-		content, err = os.ReadFile(filePath)
-		if err != nil {
-			return nil
-		}
+		return nil
 	}
 
 	lines := strings.Split(string(content), "\n")
@@ -107,6 +105,14 @@ func ParseApplications(careerOpsPath string) []model.CareerApplication {
 		if len(fields) > 8 {
 			app.Notes = fields[8]
 		}
+		// Outcome columns (fields 9-12); absent on legacy 9-column rows.
+		outcome := make([]string, 4)
+		for j := range outcome {
+			if len(fields) > 9+j {
+				outcome[j] = fields[9+j]
+			}
+		}
+		app.AppliedDate, app.Channel, app.FurthestStage, app.RejectionReason = outcome[0], outcome[1], outcome[2], outcome[3]
 
 		apps = append(apps, app)
 	}
@@ -124,7 +130,7 @@ func ParseApplications(careerOpsPath string) []model.CareerApplication {
 		if apps[i].ReportPath == "" {
 			continue
 		}
-		fullReport := filepath.Join(careerOpsPath, apps[i].ReportPath)
+		fullReport := paths.User(careerOpsPath, apps[i].ReportPath)
 		reportContent, err := os.ReadFile(fullReport)
 		if err != nil {
 			continue
@@ -166,6 +172,8 @@ func ParseApplications(careerOpsPath string) []model.CareerApplication {
 	// one so dashboard `open` opens the ATS, not LinkedIn.
 	enrichFromJDFiles(careerOpsPath, apps)
 
+	markSweden(careerOpsPath, apps)
+
 	// Strategy 4: scan-history.tsv (pipeline scan entries matched by company+role)
 	enrichFromScanHistory(careerOpsPath, apps)
 
@@ -185,7 +193,7 @@ func ParseApplications(careerOpsPath string) []model.CareerApplication {
 // so the row remains in the Fetched group until `node merge-tracker.mjs`
 // runs (or the user presses `m` in the dashboard).
 func hydrateFetchedFromTSVs(careerOpsPath string, apps []model.CareerApplication) {
-	dir := filepath.Join(careerOpsPath, "data", "tracker-additions")
+	dir := paths.Data(careerOpsPath, "tracker-additions")
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return
@@ -399,7 +407,7 @@ func isLinkedInJobURL(u string) bool {
 // wins for dashboard `open`. A JD that legitimately has only a LinkedIn URL
 // (Easy-Apply) is kept as-is.
 func enrichFromJDFiles(careerOpsPath string, apps []model.CareerApplication) {
-	jdsDir := filepath.Join(careerOpsPath, "data", "jds")
+	jdsDir := paths.Data(careerOpsPath, "jds")
 	entries, err := os.ReadDir(jdsDir)
 	if err != nil {
 		return
@@ -442,6 +450,40 @@ func enrichFromJDFiles(careerOpsPath string, apps []model.CareerApplication) {
 	}
 }
 
+// markSweden sets InSweden from the **Location:** header of data/jds/{NUM}-*.md
+// (written by the fetcher, same field lib/location-gate.mjs reads), falling
+// back to the report's **Location:** line for rows whose JD file is gone.
+func markSweden(careerOpsPath string, apps []model.CareerApplication) {
+	jdsDir := paths.Data(careerOpsPath, "jds")
+	byNum := make(map[string]string)
+	if entries, err := os.ReadDir(jdsDir); err == nil {
+		for _, e := range entries {
+			if m := reJDNumPrefix.FindStringSubmatch(e.Name()); m != nil && strings.HasSuffix(e.Name(), ".md") {
+				byNum[strings.TrimLeft(m[1], "0")] = filepath.Join(jdsDir, e.Name())
+			}
+		}
+	}
+	for i := range apps {
+		path, ok := byNum[strconv.Itoa(apps[i].Number)]
+		if !ok && apps[i].ReportPath != "" {
+			path, ok = paths.User(careerOpsPath, apps[i].ReportPath), true
+		}
+		if !ok {
+			continue
+		}
+		b, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		if len(b) > 2000 {
+			b = b[:2000]
+		}
+		if m := reLocation.FindStringSubmatch(string(b)); m != nil {
+			apps[i].InSweden = reSweden.MatchString(m[1])
+		}
+	}
+}
+
 // enrichFromScanHistory fills JobURL from scan-history.db (SQLite) by matching company name.
 // Falls back to the legacy scan-history.tsv if the DB is not present (e.g. pre-migration checkouts).
 func enrichFromScanHistory(careerOpsPath string, apps []model.CareerApplication) {
@@ -452,14 +494,7 @@ func enrichFromScanHistory(careerOpsPath string, apps []model.CareerApplication)
 	}
 	byCompany := make(map[string][]scanEntry)
 
-	dbPath := filepath.Join(careerOpsPath, "scan-history.db")
-	// Also try data/scan-history.db for the boilerplate layout.
-	if _, err := os.Stat(dbPath); err != nil {
-		alt := filepath.Join(careerOpsPath, "data", "scan-history.db")
-		if _, err2 := os.Stat(alt); err2 == nil {
-			dbPath = alt
-		}
-	}
+	dbPath := paths.Data(careerOpsPath, "scan-history.db")
 
 	if _, err := os.Stat(dbPath); err == nil {
 		db, err := sql.Open("sqlite", dbPath+"?mode=ro")
@@ -483,7 +518,7 @@ func enrichFromScanHistory(careerOpsPath string, apps []model.CareerApplication)
 		}
 	} else {
 		// Legacy TSV fallback.
-		scanPath := filepath.Join(careerOpsPath, "scan-history.tsv")
+		scanPath := paths.Data(careerOpsPath, "scan-history.tsv")
 		scanData, err := os.ReadFile(scanPath)
 		if err != nil {
 			return
@@ -699,7 +734,7 @@ func NormalizeStatus(raw string) string {
 
 // LoadReportSummary extracts key fields from a report file.
 func LoadReportSummary(careerOpsPath, reportPath string) (summary, location string) {
-	fullPath := filepath.Join(careerOpsPath, reportPath)
+	fullPath := paths.User(careerOpsPath, reportPath)
 	content, err := os.ReadFile(fullPath)
 	if err != nil {
 		return
@@ -723,14 +758,10 @@ func LoadReportSummary(careerOpsPath, reportPath string) (summary, location stri
 
 // UpdateApplicationStatus updates the status of an application in applications.md.
 func UpdateApplicationStatus(careerOpsPath string, app model.CareerApplication, newStatus string) error {
-	filePath := filepath.Join(careerOpsPath, "applications.md")
+	filePath := paths.Data(careerOpsPath, "applications.md")
 	content, err := os.ReadFile(filePath)
 	if err != nil {
-		filePath = filepath.Join(careerOpsPath, "data", "applications.md")
-		content, err = os.ReadFile(filePath)
-		if err != nil {
-			return err
-		}
+		return err
 	}
 
 	lines := strings.Split(string(content), "\n")
@@ -746,6 +777,9 @@ func UpdateApplicationStatus(careerOpsPath string, app model.CareerApplication, 
 		updated, ok := setStatusCell(line, newStatus)
 		if !ok {
 			return fmt.Errorf("malformed tracker row for #%d: cannot locate status cell", app.Number)
+		}
+		if NormalizeStatus(newStatus) == "applied" {
+			updated = fillAppliedDate(updated, time.Now().Format("2006-01-02"))
 		}
 		lines[i] = updated
 		found = true
@@ -763,12 +797,27 @@ func UpdateApplicationStatus(careerOpsPath string, app model.CareerApplication, 
 // For a row like "| 431 | ... | notes |" the result is:
 // index 0 = "" (before leading pipe), 1 = Number, 2 = Date, 3 = Company,
 // 4 = Role, 5 = Score, 6 = Status, 7 = PDF, 8 = Report, 9 = Notes,
-// 10 = "" (after trailing pipe). Whitespace inside each cell is preserved.
+// 10 = Applied Date, 11 = Channel, 12 = Furthest Stage, 13 = Rejection Reason,
+// 14 = "" (after trailing pipe). Whitespace inside each cell is preserved.
 func trackerCells(line string) []string {
 	return strings.Split(line, "|")
 }
 
-const statusCellIndex = 6
+const (
+	statusCellIndex      = 6
+	appliedDateCellIndex = 10
+)
+
+// fillAppliedDate writes date into an empty Applied Date cell. A recorded date
+// is never overwritten, and a legacy row without outcome columns is left as-is.
+func fillAppliedDate(line, date string) string {
+	cells := trackerCells(line)
+	if len(cells) <= appliedDateCellIndex+1 || strings.TrimSpace(cells[appliedDateCellIndex]) != "" {
+		return line
+	}
+	cells[appliedDateCellIndex] = " " + date + " "
+	return strings.Join(cells, "|")
+}
 
 // rowMatches reports whether a tracker row identifies the given application.
 // The tracker number (column 1) is the stable primary key and is always
@@ -1006,10 +1055,10 @@ func ScanOutputCVsByNum(careerOpsPath string) map[string]bool {
 // report numbers that have a pending CV review JSON on disk *and* the generated
 // -cv.md it reviews. A review whose -cv.md sibling is gone cannot be opened (the
 // fact-check screen shows the CV, and finalize renders it to PDF), so it is
-// excluded — the row must be regenerated (`g`) rather than showing a dead
+// excluded — the row must be re-tailored (`t`) rather than showing a dead
 // "Review" badge that Enter refuses to open.
 func ScanOutputReviewsByNum(careerOpsPath string) map[string]bool {
-	outDir := filepath.Join(careerOpsPath, "output", "customized-cvs")
+	outDir := paths.Output(careerOpsPath, "customized-cvs")
 	entries, err := os.ReadDir(outDir)
 	if err != nil {
 		return nil
@@ -1060,7 +1109,7 @@ func LeadingNum(name string) string {
 // generated artifacts do not depend on. Returns "" when no generated CV exists
 // for num.
 func CustomizedCVBase(careerOpsPath, num string) string {
-	outDir := filepath.Join(careerOpsPath, "output", "customized-cvs")
+	outDir := paths.Output(careerOpsPath, "customized-cvs")
 	entries, err := os.ReadDir(outDir)
 	if err != nil {
 		return ""
@@ -1076,7 +1125,7 @@ func CustomizedCVBase(careerOpsPath, num string) string {
 }
 
 func scanOutputByNumSuffix(careerOpsPath, suffix string) map[string]bool {
-	outDir := filepath.Join(careerOpsPath, "output", "customized-cvs")
+	outDir := paths.Output(careerOpsPath, "customized-cvs")
 	entries, err := os.ReadDir(outDir)
 	if err != nil {
 		return nil
@@ -1108,7 +1157,7 @@ func CleanupDiscardedFiles(careerOpsPath string, app model.CareerApplication) []
 
 	var deleted []string
 
-	jdsDir := filepath.Join(careerOpsPath, "data", "jds")
+	jdsDir := paths.Data(careerOpsPath, "jds")
 	if entries, err := os.ReadDir(jdsDir); err == nil {
 		for _, e := range entries {
 			name := e.Name()
@@ -1121,7 +1170,7 @@ func CleanupDiscardedFiles(careerOpsPath string, app model.CareerApplication) []
 		}
 	}
 
-	outDir := filepath.Join(careerOpsPath, "output", "customized-cvs")
+	outDir := paths.Output(careerOpsPath, "customized-cvs")
 	if entries, err := os.ReadDir(outDir); err == nil {
 		for _, e := range entries {
 			name := e.Name()

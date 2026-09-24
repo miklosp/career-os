@@ -10,12 +10,12 @@ For focused drilling on one weakness, use `practice`. For analyzing a real trans
 |------|------|-----|
 | `modes/_rubrics.md` | ALWAYS | 5-dim score anchors, Hire Signal criteria |
 | `modes/_round-types.md` | ALWAYS | Per-round character, weight shifts, question themes |
-| `config/story-bank.md` | ALWAYS | Story content for the post-mock debrief; freshness/overuse signals |
-| `data/interview-prep/{NUM}-*.md` | If `{NUM}` is set AND a prep artifact exists | Company-specific questions and intel |
-| `data/score-history.md` | ALWAYS (append at end) | Mock score log |
-| `config/profile.md` | ALWAYS | Seniority band (Target Roles & Archetypes) |
-| `data/active-strategy.md` | ALWAYS | Active Strategy / current bottleneck |
-| `data/applications.md` | If `--company` is set | Cross-reference current Interview status for that company |
+| `user/config/story-bank.md` | ALWAYS | Story content for the post-mock debrief; freshness/overuse signals |
+| `user/data/interview-prep/{NUM}-*.md` | If `{NUM}` is set AND a prep artifact exists | Company-specific questions and intel |
+| `user/data/score-history.md` | ALWAYS (append at end) | Mock score log |
+| `user/config/profile.md` | ALWAYS | Seniority band (Target Roles & Archetypes) |
+| `user/data/active-strategy.md` | ALWAYS | Active Strategy / current bottleneck |
+| `user/data/applications.md` | If `--company` is set | Cross-reference current Interview status for that company |
 
 ## Flags
 
@@ -57,7 +57,7 @@ Read `_round-types.md` for the per-round character. Lock into that persona — t
 Pick {N} questions for the round, in priority order:
 
 1. **Company-specific** questions from the prep artifact, if loaded. Prioritize questions tagged as round-specific in the artifact.
-2. **High-Signal Themes** from `_round-types.md` filtered by archetype (Product Leadership for Miklós).
+2. **High-Signal Themes** from `_round-types.md` filtered by archetype (the candidate's archetype from `user/config/profile.md`).
 3. **PM-specific patterns** if archetype = Product Leadership or AI PM.
 
 For `panel`: cast 3 personas — Skeptic, Ally, Silent Observer. Rotate who asks each question. Label the asker:
@@ -122,7 +122,7 @@ Emit the full debrief:
  where the impression shifted up or down. Be specific and unsentimental.
 
  Example:
- - "Q1: Strong opener. The 0→$1M ARR framing landed — I was already nodding 30 seconds in.
+ - "Q1: Strong opener. The 0→$2M ARR framing landed — I was already nodding 30 seconds in.
  - Q2: Started losing me here. Reflexive 'we' framing meant I couldn't tell what *you* did.
    I almost asked 'and what did you specifically do?' but you self-corrected at the end.
  - Q3: Recovered. The earned secret about async user research was the moment I leaned forward.
@@ -139,9 +139,9 @@ Emit the full debrief:
 ## Storybank Updates (proposed)
 
 - Stories used (per the candidate's recall — ask if unclear):
-  - Q1: S001 (Flux UX)
-  - Q3: S007 (Botkube Conversational Agent)
-  - Q5: S009 (Secberus 0→$1M ARR)
+  - Q1: S001 (Onboarding redesign)
+  - Q3: S007 (Globex support agent)
+  - Q5: S009 (Acme 0→$2M ARR)
 - Strength recalibration:
   - {If a story rated Strength 5 landed weakly under probing, propose dropping to 4 with reasoning}
 - Overuse warnings:
@@ -155,16 +155,16 @@ Emit the full debrief:
 
 ### Step 4: State writes
 
-Append one row to `data/score-history.md`:
+Append one row to `user/data/score-history.md`:
 ```
 {date}	mock	{company-slug or "generic"}-{round-type}	{S avg}	{St avg}	{R avg}	{Cr avg}	{D avg}	{Hire Signal}	{root cause flagged or "—"}	{brief note}
 ```
 
 If the candidate confirms which stories were used in the "Storybank Updates" section:
-- For each confirmed story, edit `config/story-bank.md`: increment `Use Count` by 1, set `Last Used` to today's date.
+- For each confirmed story, edit `user/config/story-bank.md`: increment `Use Count` by 1, set `Last Used` to today's date.
 - Do NOT auto-recalibrate Strength — only do that if the candidate explicitly approves the proposed change.
 
-Update `data/revisit-queue.md` if a cross-round root cause was detected (same rule as `practice` — 2+ rounds in this session showing the same cause).
+Update `user/data/revisit-queue.md` if a cross-round root cause was detected (same rule as `practice` — 2+ rounds in this session showing the same cause).
 
 ### Step 5: Optional — feed to interview-prep
 
@@ -172,7 +172,7 @@ If `--company` is set and this is the first mock against that company:
 
 > "Want me to update the prep artifact for {company} with what we just learned? I can add the questions that came up, your story mappings, and the weaknesses to drill before the real round."
 
-If yes: edit `data/interview-prep/{company-slug}-*.md` — add a "Mock Round Notes — {date}" section. Do not rewrite the prep; append.
+If yes: edit `user/data/interview-prep/{company-slug}-*.md` — add a "Mock Round Notes — {date}" section. Do not rewrite the prep; append.
 
 ---
 
@@ -180,7 +180,7 @@ If yes: edit `data/interview-prep/{company-slug}-*.md` — add a "Mock Round Not
 
 - **Stay in character through the entire mock.** No coaching, no commentary, no scoring leaks. The interviewer is silent on quality.
 - **Cap follow-ups at 2-3 per question.** Don't burn the whole mock on Q1.
-- **Score with seniority calibration.** Miklós is Senior/Lead — a "4 on Substance" requires systems-level thinking, not just specific examples.
+- **Score with seniority calibration.** Use the candidate's band (`user/config/profile.md`); at Senior/Lead a "4 on Substance" requires systems-level thinking, not just specific examples.
 - **Quote real moments in the Inner Monologue.** Don't summarize abstractly — point to the exact phrase or beat that shifted the impression.
 - **Never invent a story the candidate didn't tell.** If the candidate left a story vague, the debrief reflects that — don't paper over it.
 - **Storybank writes require candidate confirmation.** Propose the updates, don't apply silently.

@@ -11,13 +11,14 @@
     "merge": "node merge-tracker.mjs",
     "scan": "node scan.mjs",
     "fetch": "node lib/fetch-jd.mjs",
-    "cv-llm": "node lib/generate-cv-llm.mjs",
+    "cv-draft": "node lib/cv-draft.mjs",
     "fact-check": "node lib/cv-fact-check.mjs",
     "cv-migrate": "node lib/cv-md-to-json.mjs",
     "cv-build": "node lib/cv-json-to-md.mjs",
     "cv-check": "node lib/cv-json-to-md.mjs --check",
     "cv-project": "node lib/cv-project.mjs",
-    "kw-analysis": "node lib/keyword-frequency.mjs"
+    "kw-analysis": "node lib/keyword-frequency.mjs",
+    "test": "node --test tests/*.test.mjs"
   },
   "keywords": [
     "ai",

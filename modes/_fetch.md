@@ -1,10 +1,10 @@
 # Mode: _fetch — Get the JD, save it, reserve a number
 
-Single source of truth for turning a job URL into a numbered file under `data/jds/`. Called by `modes/auto-pipeline.md` and by `scan.mjs`. Always dispatch as a background agent.
+Single source of truth for turning a job URL into a numbered file under `user/data/jds/`. Called by `modes/auto-pipeline.md` and by `scan.mjs`. Always dispatch as a background agent.
 
 > **This mode is the fallback, not the front door.** `node lib/fetch-jd.mjs "{url}"` already does Steps 1–5 deterministically and zero-token for every known ATS (Lever, Greenhouse, Ashby, Teamtailor, Personio, Workday CXS, Rippling, LinkedIn) plus any host in the learned registry. The auto-pipeline prep (`lib/prep-jds.mjs`) runs it first (see `auto-pipeline.md` Phase 1). You only land here when the helper returned `unknown-host` or `error`. Your job then: resolve the structured source by hand using the priority methods below, save the JD, and **teach the registry** (see "Learning loop") so the next time it's zero-token.
 
-> **Ban list.** A banned company (`config/portals.yml` → `banned_companies`) is caught by `fetch-jd.mjs` Guard A *before* `unknown-host` is ever emitted, so a banned URL never reaches this mode. If you nonetheless discover mid-resolution that the employer is on the ban list, **stop immediately** — write no JD, no row — and report `banned`. Never spend a Firecrawl/agent-browser/Playwright call on a banned company.
+> **Ban list.** A banned company (`user/config/portals.yml` → `banned_companies`) is caught by `fetch-jd.mjs` Guard A *before* `unknown-host` is ever emitted, so a banned URL never reaches this mode. If you nonetheless discover mid-resolution that the employer is on the ban list, **stop immediately** — write no JD, no row — and report `banned`. Never spend a Firecrawl/agent-browser/Playwright call on a banned company.
 
 ## Input
 
@@ -16,20 +16,21 @@ A job posting URL (LinkedIn, Greenhouse, Lever, Ashby, company careers page, agg
 
    ```bash
    url_path=$(printf '%s' "{url}" | awk -F'?' '{print $1}' | sed 's|/application/*$||;s|/$||')
-   match=$(grep -rlF "**URL:** ${url_path}" data/jds/ 2>/dev/null | head -1)
+   match=$(grep -rlF "**URL:** ${url_path}" user/data/jds/ 2>/dev/null | head -1)
    ```
 
-   If `$match` is non-empty, the JD already exists. The next decision depends on its evaluation status — read the row in `data/applications.md` whose `#` column equals the leading 3-digit NUM of `$match`:
+   If `$match` is non-empty, the JD already exists. The next decision depends on its evaluation status — read the row in `user/data/applications.md` whose `#` column equals the leading 3-digit NUM of `$match`:
 
    - **Status `Evaluated` / `Applied` / `Responded` / `Interview` / `Offer` / `Rejected` / `Discarded` / `Skipped-Location` / `SKIP`** → stop silently. Already handled.
    - **Status `Fetched`** → the JD was prefetched (typically by `lib/scan-linkedin.mjs` during `scan.mjs`). The fetch work is already done; **skip Steps 2–5 and proceed to Step 6 (Hand off)** so the orchestrator runs `_location-gate.md` then `_eval.md` against the existing JD. Do NOT re-fetch — that would burn Firecrawl credits and LinkedIn request budget for content already on disk.
-   - **No matching row in `applications.md`** → the JD file is orphaned (race or manual edit). Treat as if dedup didn't hit and continue with Steps 2–5 to populate the row, but reuse the existing NUM and JD path instead of reserving a new one.
+   - **No matching row, but a `user/data/reports/{NUM}-*.md` exists** → the row was removed by `dedup-tracker.mjs` as a duplicate. Stop silently.
+   - **No matching row and no report** → the JD file is orphaned (race or manual edit). Treat as if dedup didn't hit and continue with Steps 2–5 to populate the row, but reuse the existing NUM and JD path instead of reserving a new one.
 
-   **`data/applications.md` is NOT a URL dedup source — it has no URL column. The `**URL:**` line in each `data/jds/*.md` file is the canonical URL store.** The status column in `applications.md` is what differentiates "already fetched, awaiting evaluation" from "fully handled."
+   **`user/data/applications.md` is NOT a URL dedup source — it has no URL column. The `**URL:**` line in each `user/data/jds/*.md` file is the canonical URL store.** The status column in `applications.md` is what differentiates "already fetched, awaiting evaluation" from "fully handled."
 
    Whenever you write the `**URL:**` header in Step 4, write the **stripped** form (no query string, no trailing slash, no `/application` suffix) so future dedup grep always matches.
 
-2. Read `data/scan-history.db` (SQLite, table `offers` with `url` PK) if it exists. Stop only if the row's status is terminal: `skipped_title`, `skipped_dup`, or `skipped_expired`. A row with status `added` is expected — it means the scanner just discovered this URL and dispatched it to us; proceed to fetch.
+2. Read `user/data/scan-history.db` (SQLite, table `offers` with `url` PK) if it exists. Stop only if the row's status is terminal: `skipped_title`, `skipped_dup`, or `skipped_expired`. A row with status `added` is expected — it means the scanner just discovered this URL and dispatched it to us; proceed to fetch.
 
 ## Step 2 — Reserve a number
 
@@ -39,13 +40,13 @@ Call `lib/next-num.mjs` to atomically reserve the next 3-digit number:
 node lib/next-num.mjs
 ```
 
-Store the returned value as `NUM`. The helper scans `data/jds/`, `data/reports/`,
-`data/applications.md`, and `data/tracker-additions/`, computes `max + 1`,
-and **atomically creates** `data/jds/{NUM}.reserved` via `O_EXCL`. Parallel
+Store the returned value as `NUM`. The helper scans `user/data/jds/`, `user/data/reports/`,
+`user/data/applications.md`, and `user/data/tracker-additions/`, computes `max + 1`,
+and **atomically creates** `user/data/jds/{NUM}.reserved` via `O_EXCL`. Parallel
 agents that race on the same NUM will lose the exclusive create and
 automatically retry with the next value — no manual retry needed.
 
-**After writing** `data/jds/{NUM}-{slug}.md` in Step 4, release the reservation
+**After writing** `user/data/jds/{NUM}-{slug}.md` in Step 4, release the reservation
 marker:
 
 ```bash
@@ -223,7 +224,7 @@ When you successfully resolve a host that arrived here as `unknown-host`, persis
    node lib/fetch-jd.mjs --learn careers.acme.com greenhouse --params '{"org":"acme"}' --note "custom domain fronting Greenhouse"
    ```
 
-   `--params` supplies anything the handler can't extract from the URL itself (org/tenant slug). Use `--regex` instead of a bare host when one rule should cover many subdomains. The entry lands in `lib/ats-registry.json` — **committed shared wisdom**, not `data/` per-user state and not `config/portals.yml` (user-owned). It's version-controlled so the next person inherits every host you resolve. The registry is consulted before the built-in matchers, so the learned mapping wins.
+   `--params` supplies anything the handler can't extract from the URL itself (org/tenant slug). Use `--regex` instead of a bare host when one rule should cover many subdomains. The entry lands in `lib/ats-registry.json` — **committed shared wisdom**, not `user/data/` per-user state and not `user/config/portals.yml` (user-owned). It's version-controlled so the next person inherits every host you resolve. The registry is consulted before the built-in matchers, so the learned mapping wins.
 
 2. **The host is a genuinely new provider** with an API shape no existing handler parses (new JSON/XML structure). The registry alone can't help — a new code handler is needed in `lib/fetch-jd.mjs` (`handlers.{name}` with `match()` + `fetch()` returning the normalized shape). **Before reverse-engineering it from scratch, check whether the parser already exists openly:** the ever-jobs repo (`github.com/ever-jobs/ever-jobs`) ships ~38 ATS connectors under `packages/plugins/source-ats-*` (Greenhouse, Lever, Ashby, Workday, SmartRecruiters, Jobvite, Workable, Avature, Oracle, …), and JobSpy covers the major boards — port the endpoint/shape from there rather than brute-forcing network calls. Then add the handler and `--learn` the host to it. Until the handler exists, record the endpoint in the **ATS API URL patterns** table above as the human-readable fallback.
 
@@ -231,7 +232,7 @@ Never store host-resolution knowledge in agent prompts or memories — it belong
 
 ## Step 4 — Save the JD
 
-Write to `data/jds/{NUM}-{company-slug}-{role-slug}.md`.
+Write to `user/data/jds/{NUM}-{company-slug}-{role-slug}.md`.
 
 `{company-slug}` and `{role-slug}` = lowercase with spaces / punctuation → hyphens, ASCII only.
 
@@ -279,19 +280,26 @@ Schema (the location gate depends on these header fields — fill them all; if t
 
 ## Step 5 — Register in applications.md
 
-Append one row to `data/applications.md` with status `Fetched`:
+Append one row to `user/data/applications.md` with status `Fetched`:
 
 ```
-| {NUM} | {YYYY-MM-DD} | {Company} | {Role} |  | Fetched | ❌ |  |  |
+| {NUM} | {YYYY-MM-DD} | {Company} | {Role} |  | Fetched | ❌ |  |  |  |  |  |  |
+```
+
+Then link the URL to its NUM in `scan-history.db` (the authoritative dedupe
+index — it keeps the URL known after the JD file is gone):
+
+```bash
+node -e "import('./lib/scan-history.mjs').then(m => { const db = m.openScanHistoryDb(); m.recordFetch(db, { canonicalUrl: '{canonical URL}', portal: 'fetch-agent', num: '${NUM}' }); db.close(); })"
 ```
 
 (Score and Report columns stay empty — they fill in after the location gate
 and scoring.) The next stage reads this row's NUM to keep numbering
-consistent across `data/jds/`, `applications.md`, and `data/reports/`.
+consistent across `user/data/jds/`, `applications.md`, and `user/data/reports/`.
 
 ## Step 6 — Hand off
 
-Return the `NUM` and `data/jds/{NUM}-...md` path to the caller. The solo-agent
+Return the `NUM` and `user/data/jds/{NUM}-...md` path to the caller. The solo-agent
 flow (`modes/auto-pipeline.md`) continues with the location gate next.
 
 ## Failure handling

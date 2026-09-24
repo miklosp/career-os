@@ -10,13 +10,13 @@ This mode is for **focused drilling** — one weakness at a time. For a full sim
 |------|------|-----|
 | `modes/_rubrics.md` | ALWAYS | 5-dim score anchors, root cause taxonomy, triage priority stack |
 | `modes/_role-drills.md` | When `--type pm-lens` | PM Six-Lens Stress Test |
-| `config/story-bank.md` | ALWAYS | Story content for `--story` flag; story freshness/overuse signals |
-| `data/revisit-queue.md` | ALWAYS (read at session start) | Active root causes to drill against |
-| `data/score-history.md` | ALWAYS (append at session end) | Score log |
-| `config/profile.md` | ALWAYS | Seniority band (Target Roles & Archetypes) |
-| `data/active-strategy.md` | ALWAYS (read at session start) | Current Active Strategy / bottleneck |
+| `user/config/story-bank.md` | ALWAYS | Story content for `--story` flag; story freshness/overuse signals |
+| `user/data/revisit-queue.md` | ALWAYS (read at session start) | Active root causes to drill against |
+| `user/data/score-history.md` | ALWAYS (append at session end) | Score log |
+| `user/config/profile.md` | ALWAYS | Seniority band (Target Roles & Archetypes) |
+| `user/data/active-strategy.md` | ALWAYS (read at session start) | Current Active Strategy / bottleneck |
 
-Do NOT read `config/cv.md` or evaluation reports. Drills are about delivery, not job fit.
+Do NOT read `user/config/cv.md` or evaluation reports. Drills are about delivery, not job fit.
 
 ## Drill types
 
@@ -34,7 +34,7 @@ If `--type` is not specified, default to `behavioral`. If `--story S0XX` is also
 
 ### Step 0: Session intro
 
-Read `data/revisit-queue.md`. If any root causes are active, surface them at the top:
+Read `user/data/revisit-queue.md`. If any root causes are active, surface them at the top:
 
 > "Active revisit queue:
 > - Reflexive 'we' framing (3 sessions ago, last seen 2 sessions ago)
@@ -44,7 +44,7 @@ Read `data/revisit-queue.md`. If any root causes are active, surface them at the
 
 Wait for input. The candidate can pick a focus or just say "general."
 
-Read `data/active-strategy.md` for Active Strategy. If a current bottleneck is set, frame the session around it:
+Read `user/data/active-strategy.md` for Active Strategy. If a current bottleneck is set, frame the session around it:
 
 > "Active Strategy is targeting Differentiation. I'll bias question choice and scoring toward that dim."
 
@@ -67,7 +67,7 @@ Candidate answers. **Do not score the warmup.** Just confirm:
 
 Pick a harder question (or a follow-up that probes the same answer deeper). Candidate answers.
 
-Score silently against the 5-dim rubric. Apply seniority calibration for Senior/Lead (Miklós's band — confirm from `config/profile.md`).
+Score silently against the 5-dim rubric. Apply seniority calibration for Senior/Lead (the candidate's band — confirm from `user/config/profile.md`).
 
 Detect root causes — does the answer show any of the 9 patterns from `_rubrics.md`? If two or more rounds in this session show the same cause, that cause goes into the revisit queue at session end.
 
@@ -113,10 +113,10 @@ Continue if the candidate wants more reps. End the session when they say "done" 
 
 ### Step 5: Session end
 
-Append rows to `data/score-history.md` — one row per scored round.
+Append rows to `user/data/score-history.md` — one row per scored round.
 
 If any root cause was detected in **2+ rounds** this session:
-- If it's already in `data/revisit-queue.md`, update `Last seen` to today's date and increment "Drills tried."
+- If it's already in `user/data/revisit-queue.md`, update `Last seen` to today's date and increment "Drills tried."
 - If new, append it with `Status: active`, today's date as both `First detected` and `Last seen`.
 - If a root cause hasn't been seen for **3+ sessions**, flip its status to `Status: resolved`.
 
@@ -139,8 +139,8 @@ Active revisit queue: {count} entries
 When picking questions, draw from (in priority order):
 
 1. **The candidate's revisit queue** — drill questions designed to surface the active root causes
-2. **`data/score-history.md` weak dimensions** — pick questions that stress the dim the candidate is weakest on
-3. **`config/story-bank.md` overuse warnings** — if a story has `Use Count >= 5`, prefer questions that DON'T map to it (force the candidate to find a different story)
+2. **`user/data/score-history.md` weak dimensions** — pick questions that stress the dim the candidate is weakest on
+3. **`user/config/story-bank.md` overuse warnings** — if a story has `Use Count >= 5`, prefer questions that DON'T map to it (force the candidate to find a different story)
 4. **High-Signal Question Themes** from `modes/_round-types.md`
 5. **PM-specific patterns** from `modes/_round-types.md` if archetype = Product Leadership / AI PM
 
@@ -153,11 +153,11 @@ When picking questions, draw from (in priority order):
 - Emit multiple root causes in one round debrief — pick the strongest signal, name one cause. Multiple noise > one clear signal.
 - Skip the "Next Round Adjustment" — that's the only line the candidate carries forward.
 - Run more than 5 scored rounds — diminishing returns; fatigue introduces false signal.
-- Write to `data/applications.md` from this mode — practice has nothing to do with the tracker.
+- Write to `user/data/applications.md` from this mode — practice has nothing to do with the tracker.
 
 ## State writes (summary)
 
-- `data/score-history.md` — append one row per scored round
-- `data/revisit-queue.md` — update or append based on detected root causes
-- `config/story-bank.md` — increment `Use Count` and update `Last Used` only if a specific story `--story S0XX` was practiced and the candidate confirms "I'd use this in a real interview" at end-of-session. (Default: no story-bank writes from practice.)
-- `data/active-strategy.md` — only edit it if the candidate explicitly asks for a strategy pivot.
+- `user/data/score-history.md` — append one row per scored round
+- `user/data/revisit-queue.md` — update or append based on detected root causes
+- `user/config/story-bank.md` — increment `Use Count` and update `Last Used` only if a specific story `--story S0XX` was practiced and the candidate confirms "I'd use this in a real interview" at end-of-session. (Default: no story-bank writes from practice.)
+- `user/data/active-strategy.md` — only edit it if the candidate explicitly asks for a strategy pivot.

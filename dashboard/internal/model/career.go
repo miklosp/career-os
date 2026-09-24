@@ -14,6 +14,13 @@ type CareerApplication struct {
 	ReportNumber string
 	Notes        string
 	JobURL       string // URL of the original job posting
+	// Outcome columns (after Notes in applications.md)
+	AppliedDate     string // YYYY-MM-DD the candidate submitted
+	Channel         string // cold-ats | referral | recruiter | exec-search | outreach
+	FurthestStage   string // none | screen | assessment | hm | panel | final | offer
+	RejectionReason string
+	// InSweden: the JD (or report) Location header names Sweden or a Swedish city.
+	InSweden bool
 	// Enrichment (lazy loaded from report)
 	Archetype    string
 	TlDr         string

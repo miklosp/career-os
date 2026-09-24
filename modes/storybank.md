@@ -1,16 +1,16 @@
 # Mode: storybank — Interactive Story Bank Management
 
-When the user runs `/career-ops storybank {review|add|status}`, run this mode. It manages `config/story-bank.md` — the canonical bank of STAR+R stories used by `practice`, `mock`, `analyze`, and any future interview-prep refactor.
+When the user runs `/career-ops storybank {review|add|status}`, run this mode. It manages `user/config/story-bank.md` — the canonical bank of STAR+R stories used by `practice`, `mock`, `analyze`, and any future interview-prep refactor.
 
 This mode is **interactive and dictation-friendly**. The candidate speaks in natural language; you do the formatting. Nothing is written to disk until the candidate explicitly approves.
 
 ## Inputs
 
-1. `config/story-bank.md` — the canonical bank (always read at start)
+1. `user/config/story-bank.md` — the canonical bank (always read at start)
 2. `modes/_rubrics.md` — Strength score anchors (read on demand when scoring a story's strength)
-3. `data/score-history.md` — optional, only read for `status` if it exists (to surface stories with weak recent performance)
+3. `user/data/score-history.md` — optional, only read for `status` if it exists (to surface stories with weak recent performance)
 
-Do NOT read `config/cv.md` or `config/profile.md` here. The storybank is its own surface. The candidate may reference experiences from those files during dictation; that's fine — capture what they say, don't auto-cross-reference.
+Do NOT read `user/config/cv.md` or `user/config/profile.md` here. The storybank is its own surface. The candidate may reference experiences from those files during dictation; that's fine — capture what they say, don't auto-cross-reference.
 
 ## Subcommand routing
 
@@ -19,7 +19,7 @@ Do NOT read `config/cv.md` or `config/profile.md` here. The storybank is its own
 | `review` (default) | Walk stories with empty/missing fields. Per-story interactive fill-in. |
 | `review --all` | Walk every story including already-filled ones (recalibration pass). |
 | `review --story S0XX` | Walk one specific story by ID. |
-| `add` | Capture a new story from scratch — STAR+R first, then header block. Appends to bottom of `config/story-bank.md`. |
+| `add` | Capture a new story from scratch — STAR+R first, then header block. Appends to bottom of `user/config/story-bank.md`. |
 | `status` | Read-only health summary. No edits. |
 
 If no subcommand is given, default to `review`.
@@ -47,7 +47,7 @@ Loop the draft-confirmation panel until the user picks Approve or Skip.
 
 ### Step 0: Identify what to review
 
-Scan `config/story-bank.md`. Build a list of stories where any of these fields is `—` (placeholder):
+Scan `user/config/story-bank.md`. Build a list of stories where any of these fields is `—` (placeholder):
 - Earned Secret
 - Strength
 - Risk/Stakes
@@ -68,7 +68,7 @@ For each story, print:
 
 ### {Heading from file}
 
-[Show the STAR+R body verbatim from config/story-bank.md]
+[Show the STAR+R body verbatim from user/config/story-bank.md]
 
 Current header fields:
   Domain: {value or —}
@@ -170,7 +170,7 @@ Capture or skip.
 
 ### Step 8: Write to file
 
-Once all fields are confirmed (or explicitly skipped), update the story's header block in `config/story-bank.md` via Edit. Replace the fields one block at a time — preserve all other content verbatim. **STAR+R body and heading do not change.**
+Once all fields are confirmed (or explicitly skipped), update the story's header block in `user/config/story-bank.md` via Edit. Replace the fields one block at a time — preserve all other content verbatim. **STAR+R body and heading do not change.**
 
 Confirm to the candidate:
 
@@ -198,7 +198,7 @@ Use this when the candidate identifies a story they want to add — usually mid-
 
 ### Step 0: Check the bank for existing coverage
 
-Before capturing anything, read `config/story-bank.md` and ask the candidate one or two placing questions — which company, which project. If a story already covers that underlying experience (even under a different interview angle), **don't add a duplicate**: offer to extend that story's **Best For** list with the new question type instead, via the draft-confirmation panel. Only proceed to Step 1 when the experience is genuinely not in the bank.
+Before capturing anything, read `user/config/story-bank.md` and ask the candidate one or two placing questions — which company, which project. If a story already covers that underlying experience (even under a different interview angle), **don't add a duplicate**: offer to extend that story's **Best For** list with the new question type instead, via the draft-confirmation panel. Only proceed to Step 1 when the experience is genuinely not in the bank.
 
 ### Step 1: Capture STAR+R
 
@@ -230,7 +230,7 @@ Run the same protocol as `review` (Earned Secret → Strength → Risk/Stakes �
 
 ### Step 4: Assign ID and append
 
-Pick the next available ID (highest existing ID + 1, zero-padded). Append the full story (heading + header block + STAR+R body) to the bottom of `config/story-bank.md`. Add a `---` separator above it.
+Pick the next available ID (highest existing ID + 1, zero-padded). Append the full story (heading + header block + STAR+R body) to the bottom of `user/config/story-bank.md`. Add a `---` separator above it.
 
 Set:
 - `Use Count: 0`
@@ -255,8 +255,8 @@ No edits. Print a one-screen summary.
 3. **Strength distribution** — count at each band (1-5 and `—`). Surface as a one-line histogram.
 4. **Earned Secret coverage** — count of stories with a non-empty Earned Secret.
 5. **Overuse warnings** — stories with `Use Count >= 5` (interviewers in the candidate's network may have heard it).
-6. **Staleness flags** — stories with `Last Used` more than 6 months ago AND in active interview loops (cross-reference `data/applications.md` if it exists; otherwise skip).
-7. **Gap topics** — Primary Skill tags present in the bank vs. tags the recent reports have asked about (only if `data/score-history.md` exists and has analyzed transcripts).
+6. **Staleness flags** — stories with `Last Used` more than 6 months ago AND in active interview loops (cross-reference `user/data/applications.md` if it exists; otherwise skip).
+7. **Gap topics** — Primary Skill tags present in the bank vs. tags the recent reports have asked about (only if `user/data/score-history.md` exists and has analyzed transcripts).
 
 ### Output format
 
@@ -287,7 +287,7 @@ Action: bank is healthy. No action needed.
 - **The bank stays small: 5-8 deeply-curated stories, never one per application.** Each story must hold up under interviewer challenge. A bank of 22 weak stories with overlapping or fabricated angles is worse than 6 strong ones - interview answers degrade to the weakest claim, and false-promise stories get caught at reference checks.
 - **In `review`, every story is deletable, not just fill-in-able.** Surface duplicates and false-promise stories for the candidate to prune. Pruning is part of the job, not an exception to it.
 - **Never auto-add on a gap.** When `interview-prep` hits a question no story covers, propose extending an existing story's **Best For** first. Add a new entry only when the underlying experience is genuinely new.
-- **Never write to `config/story-bank.md` without explicit candidate approval.** A field is written only after the candidate selects **Approve** on its confirmation panel.
+- **Never write to `user/config/story-bank.md` without explicit candidate approval.** A field is written only after the candidate selects **Approve** on its confirmation panel.
 - **Never invent earned secrets.** If the candidate's input doesn't contain a real insight, leave Earned Secret as `—` and move on.
 - **STAR+R body and heading are immutable in `review`.** Only header-block fields change.
 - **One field at a time during dictation.** Don't fire 5 questions at once — the candidate is talking, not filling a form.

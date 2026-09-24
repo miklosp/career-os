@@ -69,7 +69,7 @@ Scoring is NOT absolute — the same answer scores differently by career stage.
 | **Senior / Lead (8-15 yr)** | Systems-level thinking + second-order effects | Reshapes how interviewer thinks about the problem |
 | **Executive (15+ yr)** | Business-level P&L impact + strategic context | Leadership philosophy applied across contexts |
 
-For this project Miklós is **Senior / Lead → Executive** (15+ yr). Use that band by default unless a specific role JD pulls down the seniority bar.
+Use the candidate's band from `user/config/profile.md` by default unless a specific role JD pulls down the seniority bar.
 
 ## Hire Signal (Mock + Analyze)
 
@@ -112,7 +112,7 @@ When the same weakness shows up across multiple answers, name the root cause —
 | Cultural communication style | Indirect framing; modesty norms reading as low confidence | Credibility, Structure, Substance | Adaptation coaching — frame as register, not deficit |
 | Linguistic formality | Overly formal tone reads as distant | Differentiation, Credibility | Register calibration — match the interviewer's energy |
 
-When a root cause is detected in **two or more** rounds within a session (or two consecutive practice sessions), flag it in `data/revisit-queue.md`. One drill targets the cause, not the affected dims separately.
+When a root cause is detected in **two or more** rounds within a session (or two consecutive practice sessions), flag it in `user/data/revisit-queue.md`. One drill targets the cause, not the affected dims separately.
 
 ## How modes use this file
 

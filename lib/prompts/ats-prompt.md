@@ -6,11 +6,11 @@ IMPORTANT: This is an automated process. Do NOT ask follow-up questions. Work wi
 
 You author **only**: (a) the Experience bullets, (b) the Professional Summary, and (c) the *selection and ordering* of Core Competencies from the provided inventory.
 
-Everything else — the identity header, role titles, company names, dates, locations/meta lines, and `::: description :::` company blurbs — is **deterministically projected from the canonical master after you finish**. Reproduce those lines verbatim from the Source CV so the document stays well-formed, but know that anything you change there is discarded and overwritten. Do not spend effort rewriting them; spend it on bullets and the Summary.
+Everything else — the identity header (name, `::: headline :::`, contact line), role titles, company names, dates, locations/meta lines, and `::: description :::` company blurbs — is **deterministically projected from the canonical master after you finish**. Reproduce those lines verbatim from the Source CV so the document stays well-formed, but know that anything you change there is discarded and overwritten. Do not spend effort rewriting them; spend it on bullets and the Summary.
 
 ## Inputs you receive
 
-1. **Source CV** (`cv_content`) — the candidate's canonical résumé, **id-annotated**: every bullet ends with its stable source id in square brackets, e.g. `- Took the product from 0 to $1M ARR [secberus-b1]`. These ids are your **only citable evidence handles** for CV content. Source of truth for facts.
+1. **Source CV** (`cv_content`) — the candidate's canonical résumé, **id-annotated**: every bullet ends with its stable source id in square brackets, e.g. `- Took the product from 0 to $1M ARR [acme-b1]`. These ids are your **only citable evidence handles** for CV content. Source of truth for facts.
 2. **Evaluation Report** (`report_content`) — a prior scoring pass against this exact JD. Block A enumerates the JD↔CV matches with **cited CV lines and their `[src: id]`**, and the gaps with mitigations. **Block A is authoritative for what counts as a Match and what counts as a Gap.** A Match already passed a "no invented metrics" filter — trust it. A Gap is forbidden territory. The report's **Criteria** ledger distils Block A into recruiter-style screening criteria:
    - `[evidenced]` criteria — each carries `[src: id]`(s). This is your **only** placement inventory (Rule 2): prove each one with verifiable evidence.
    - `[gap]` criteria — carry no src; forbidden territory, same as a Block-A gap. Their absence from the CV is intentional.
@@ -25,10 +25,11 @@ Everything else — the identity header, role titles, company names, dates, loca
 
 A deterministic validator runs on your output and **rejects the whole run** on any violation. These are not guidelines:
 
-- **C1.** Every Experience bullet MUST end with `[src: <id>]` (or `[src: id, id]` when merging sources) citing the source id(s) that support it. Every id must resolve to a Source CV bullet id, a Story Bank `S0xx`, a confirmed Note id (`n#`), or a Block-A Match id. Unknown/missing id → reject.
-- **C2.** The Professional Summary MUST end with a **composite** citation listing every id its claims rest on: `[src: secberus-b1, weave-works-head-of-user-experience-b4, S012]`. Every named entity in the Summary (title, skill, tool, metric, employer) must be backed verbatim (or via an approved alias) by the union of those cited sources, or be a registered `<bridge>`. The Summary gets the **strictest** check — no softening.
+- **C1.** Every Experience bullet MUST end with `[src: <id>]` citing the one source id that supports it. The id must resolve to a Source CV bullet id, a Story Bank `S0xx`, a confirmed Note id (`n#`), or a Block-A Match id. Unknown/missing id → reject.
+- **C2.** The Professional Summary MUST end with a **composite** citation listing every id its claims rest on: `[src: acme-b1, acme-globex-b4, S012]`. Every named entity in the Summary (title, skill, tool, metric, employer) must be backed verbatim (or via an approved alias) by the union of those cited sources, or be a registered `<bridge>`. The Summary gets the **strictest** check — no softening.
 - **C3.** Core Competencies is **closed-world**: choose 8–12 items drawn ONLY from the Source CV's Core Competencies list (that list is the full skills inventory). You may reorder and subset; you may NOT introduce any competency not in that list. Block-A Gaps may not appear.
-- **C4.** Bullets cite 1–3 source ids. A bullet that legitimately merges two source bullets cites both — every specific claim in the bullet must be supported by the **union** of its cited sources. Never invent a blended claim that no cited source supports, and never pad the citation with ids that contribute nothing. The cited sources must actually support the bullet's specific entities (languages, tools, frameworks, metrics, employers, year counts) verbatim or via an approved alias.
+- **C4.** Bullets carry exactly one `[src: id]`. Do not merge source bullets: two sources means two bullets, or keep only the claim the primary source supports. Never invent a blended claim. The cited source must actually support the bullet's specific entities (languages, tools, frameworks, metrics, employers, year counts) verbatim or via an approved alias.
+- **C5.** Length caps, counted in words with `[src: …]` tags excluded: the Professional Summary ≤ 85 words; every Experience bullet ≤ 25 words. One outcome per bullet — cut trailing clauses rather than chaining a second result.
 
 The `[src: …]` tags are stripped before rendering — they never appear in the final CV. Write them anyway; they are how the system proves every line traces to truth.
 
@@ -87,9 +88,9 @@ MUST NOT:
 - Never import JD culture / working-style sentences (e.g. "bring just enough structure to move fast").
 - No keyword chains or stacked adjectives.
 
-**Rule 3 — Achievement Format: CAR (Challenge-Action-Result).** Strong action verb; JD vocabulary only where Block A grants it as a Match (else CV's own vocabulary or a bridge); quantified metric sourced from the cited id, never invented; 1–2 lines; end with `[src: id]`.
+**Rule 3 — Achievement Format: CAR (Challenge-Action-Result).** Strong action verb; JD vocabulary only where Block A grants it as a Match (else CV's own vocabulary or a bridge); quantified metric sourced from the cited id, never invented; one outcome, ≤ 25 words (C5); end with `[src: id]`.
 
-Example — `BEFORE: "Managed product launches"` → `AFTER: "Defined and executed product roadmap delivering three features that contributed to $1M ARR growth in 12 months [secberus-b1]"` *(only if that metric appears in secberus-b1 or a story-bank entry — cite whichever)*.
+Example — `BEFORE: "Managed product launches"` → `AFTER: "Defined and executed product roadmap delivering three features that contributed to $1M ARR growth in 12 months [acme-b1]"` *(only if that metric appears in acme-b1 or a story-bank entry — cite whichever)*.
 
 **Rule 4 — Aggressive Relevance Editing.**
 - 2 most recent roles: 4–6 bullets each, all highly relevant.
@@ -106,21 +107,21 @@ Example — `BEFORE: "Managed product launches"` → `AFTER: "Defined and execut
 - International: standard achievement-focused, no hyperbole.
 - All: never "revolutionary", "visionary", "single-handedly". Never upgrade language proficiency levels.
 
-**Rule 6 — Summary Rewrite.** 3–4 lines: open with the target title or closest honest bridge; 3–5 evidenced-criteria terms; one signature metric from a cited source; match seniority voice; Swedish roles get a brief collaborative qualifier. End with the **composite `[src: …]`** (C2).
+**Rule 6 — Summary Rewrite.** ≤ 85 words (C5): open with the target title or closest honest bridge; 3–5 evidenced-criteria terms; one signature metric from a cited source; match seniority voice; Swedish roles get a brief collaborative qualifier. End with the **composite `[src: …]`** (C2).
 
 **Rule 7 — Core Competencies (closed-world).** Select 8–12 items from the Source CV's Core Competencies list, prioritising: (1) those backing Block-A Matches, (2) those aligning with Must-cover terms. Reorder/subset only. No new competencies (C3). No Block-A Gaps.
 
-**Rule 8 — Consultancy Framing.** The fractional CPO/CDO role is deliberate strategic consulting, not a gap. Keep the umbrella structure (parent + client sub-entries). Adjust per-client bullet counts by relevance.
+**Rule 8 — Consultancy Framing.** A fractional / consulting umbrella role is deliberate strategic consulting, not a gap. Keep the umbrella structure (parent + client sub-entries). Adjust per-client bullet counts by relevance.
 
 **Rule 9 — ATS-Safe Formatting.** Preserve the exact markdown structure/headers of the Source CV (minus the `[id]` annotations, which you replace with `[src: id]` per the contract). Verbatim section headers ("Summary", "Core Competencies", "Experience", "Education"). Keep `::: description :::` blocks. No tables, images, columns. Contact info in the main body.
 
-**Rule 10 — Length guidance (the renderer enforces pages).** Aim for a focused, senior 2-page-ish CV: ~15–22 bullets total, Summary 3–4 lines, Core Competencies one line. Do NOT drop content merely to hit a page count — the renderer trims by relevance deterministically after you. Prioritise the most relevant content; let the renderer handle final fit.
+**Rule 10 — Length guidance (the renderer enforces pages).** Aim for a focused, senior 2-page-ish CV: ~15–22 bullets total, Summary ≤ 85 words, bullets ≤ 25 words, Core Competencies one line. Do NOT drop content merely to hit a page count — the renderer trims by relevance deterministically after you. Prioritise the most relevant content; let the renderer handle final fit.
 
 ### Phase 5 — Emit `<bridges>` and `<gaps>`
 For every vocabulary bridge: the rendered CV uses the **conservative wording**; the JD upgrade goes only in `<bridges>`. Do not put JD bridge-wording into the CV body. For every JD requirement you could NOT honestly support from any cited source, add a `<gaps>` entry instead of silently dropping it — this is the honest audit trail of what was left out.
 
 ### Phase 6 — Final Verification
-Scan for: languages/frameworks not in source; "SDK" without a shipped SDK; "backwards compatibility" without API versioning; year-count framing below actual tenure; Block-A Gaps as claimed competencies; JD-distinctive phrases not in a cited source; **any bullet missing `[src: id]`; Summary missing the composite; any cited id you cannot point to in the inputs.** Any hit = fix before output (or demote to a `<bridges>`/`<gaps>` entry).
+Scan for: languages/frameworks not in source; "SDK" without a shipped SDK; "backwards compatibility" without API versioning; year-count framing below actual tenure; Block-A Gaps as claimed competencies; JD-distinctive phrases not in a cited source; **any bullet missing `[src: id]` or citing more than one id; any bullet over 25 words or a Summary over 85; Summary missing the composite; any cited id you cannot point to in the inputs.** Any hit = fix before output (or demote to a `<bridges>`/`<gaps>` entry).
 
 Then a **readability gate**: re-read every bullet and the Summary as a reader who has never seen the JD — any phrase that exists only to plant a term must be rewritten naturally or dropped.
 
@@ -142,7 +143,7 @@ Output exactly three parts, in order:
   "bridges": [
     {
       "id": "b1",
-      "section": "string — e.g. 'Summary', 'Secberus bullet 2'",
+      "section": "string — e.g. 'Summary', 'Acme bullet 2'",
       "generated_text": "string — the conservative phrase in the rendered CV (verbatim substring, WITHOUT the [src: id] tag)",
       "source_type": "cv | story_bank | notes | report",
       "source_cv_evidence": "string — quote from the cited source supporting the conservative version",

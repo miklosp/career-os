@@ -33,8 +33,16 @@ h1 {
   margin: 0 0 1pt 0;
 }
 
+/* Headline (basics.label) */
+h1 + .headline {
+  font-size: 10.5pt;
+  color: #333333;
+  margin: 0 0 2pt 0;
+}
+
 /* Contact line */
-h1 + p {
+h1 + p,
+h1 + .headline + p {
   font-size: 8.5pt;
   color: #555555;
   margin: 0 0 6pt 0;
@@ -121,7 +129,8 @@ a {
   text-decoration: none;
 }
 
-h1 + p a {
+h1 + p a,
+h1 + .headline + p a {
   text-decoration: underline;
   text-decoration-color: #bbbbbb;
 }

@@ -3,14 +3,14 @@
 <!-- ============================================================
      System file. Self-contained: the app depends on no external
      writing skill. General craft rules live here; personal
-     voice/branding lives in config/profile.md → Voice & Branding.
+     voice/branding lives in user/config/profile.md → Voice & Branding.
      ============================================================ -->
 
 The quality bar for **every piece of generated text that reaches a human reviewer**: CV summaries and bullets, cover letters, application form free-text answers, outbound LinkedIn/email messages.
 
-**Out of scope:** internal evaluation reports (`data/reports/*`) and terminal output to the user — working notes, not candidate-facing.
+**Out of scope:** internal evaluation reports (`user/data/reports/*`) and terminal output to the user — working notes, not candidate-facing.
 
-Apply this file together with the candidate's personal voice in `config/profile.md` → **Voice & Branding**. This file is the general craft; that section is the individual signature. When the personal section is silent on something, this file governs.
+Apply this file together with the candidate's personal voice in `user/config/profile.md` → **Voice & Branding**. This file is the general craft; that section is the individual signature. When the personal section is silent on something, this file governs.
 
 ## 1. What good sounds like
 
@@ -67,7 +67,7 @@ Do not over-correct these:
 
 ## 5. ATS Unicode (enforced in code, not by memory)
 
-Em-dashes, en-dashes, smart quotes, ellipses, zero-width chars and nbsp break Workday/Greenhouse/Lever parsers. `lib/normalize-text.mjs` strips them deterministically at every programmatic write point (`generate-cv-llm.mjs`, `cv-fact-check.mjs`). Where text is filled by an agent into a browser form or written straight to a markdown file (no script in the path), apply the substitutions by hand: `—`/`–`→`-`, `"" ''`→`" '`, `…`→`...`, strip zero-width/nbsp.
+Em-dashes, en-dashes, smart quotes, ellipses, zero-width chars and nbsp break Workday/Greenhouse/Lever parsers. `lib/normalize-text.mjs` strips them deterministically at every programmatic write point (`cv-draft.mjs finalize`, `cv-fact-check.mjs`). Where text is filled by an agent into a browser form or written straight to a markdown file (no script in the path), apply the substitutions by hand: `—`/`–`→`-`, `"" ''`→`" '`, `…`→`...`, strip zero-width/nbsp.
 
 ## 6. Self-check before output
 
@@ -76,5 +76,5 @@ Mandatory for everything a reviewer reads; exempt only short factual fields (nam
 1. **"What makes this sound AI-generated?"** Answer honestly: name the remaining tells from §3, and the sterile ones too (every sentence the same length, no opinion, no first person, no moment of honesty). Then fix exactly those.
 2. **Read it aloud in your head.** Any sentence awkward to say gets rewritten.
 3. **Selection (§2):** every sentence answers the question; proofs at the minimum that proves the point.
-4. **Signature:** the personal voice from `config/profile.md` is audible. Put a paragraph next to the sample letter or the candidate's own phrasing: would the same person have written both?
+4. **Signature:** the personal voice from `user/config/profile.md` is audible. Put a paragraph next to the sample letter or the candidate's own phrasing: would the same person have written both?
 5. **Ends on a signal**, not a trailing observation.

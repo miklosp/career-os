@@ -6,7 +6,7 @@
      when the archetype is PM.
 
      Currently PM-only. Engineer / Designer / Data drills are
-     deferred until Miklós targets non-PM roles.
+     deferred until the candidate targets non-PM roles.
      ============================================================ -->
 
 ## PM Six-Lens Stress Test

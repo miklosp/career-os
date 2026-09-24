@@ -657,6 +657,28 @@
       "note": "Oracle Taleo classic (jobdetail.ftl); AJAX-rendered fields need firecrawl; role parsed from post-render document.title pattern 'Job Description - {Role} ({ReqID})'",
       "source": "learned",
       "added": "2026-08-28"
+    },
+    {
+      "match": "www.storyblok.com",
+      "matchType": "host",
+      "handler": "greenhouse",
+      "params": {
+        "org": "storyblok"
+      },
+      "note": "Storyblok careers page embeds Greenhouse job board; ?gh_jid={id} maps to boards-api.greenhouse.io/v1/boards/storyblok",
+      "source": "learned",
+      "added": "2026-09-20"
+    },
+    {
+      "match": "www.getencube.com",
+      "matchType": "host",
+      "handler": "wysiwygDiv",
+      "params": {
+        "company": "Encube"
+      },
+      "note": "custom Next.js careers page (getencube.com), no ATS API/JSON-LD; JD body SSR'd in a class=\"wysiwyg\" div, plain xh GET is enough",
+      "source": "learned",
+      "added": "2026-09-23"
     }
   ]
 }

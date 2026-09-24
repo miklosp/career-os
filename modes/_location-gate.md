@@ -1,6 +1,6 @@
 # Mode: _location-gate — Skip roles that don't fit the user's geography
 
-Runs after `modes/_fetch.md` has saved a JD under `data/jds/{NUM}-*.md` and before
+Runs after `modes/_fetch.md` has saved a JD under `user/data/jds/{NUM}-*.md` and before
 `modes/_eval.md` spends tokens scoring it. Cheap, deterministic, honest —
 when a role can't work geographically, skip it with the evidence quoted.
 
@@ -20,13 +20,13 @@ judgment for Rules 0 / 3 / 4 / 5 / 6 below.
 ## Input
 
 - `NUM` from the fetch stage
-- `data/jds/{NUM}-*.md` (the saved JD with its populated location header fields)
+- `user/data/jds/{NUM}-*.md` (the saved JD with its populated location header fields)
 
 ## Step 1 — Load policy
 
-Read `config/profile.md` frontmatter → `location_policy` block. If the block is missing:
+Read `user/config/profile.md` frontmatter → `location_policy` block. If the block is missing:
 
-- Log one warning: `location_policy missing from config/profile.md — gate disabled, everything passes`.
+- Log one warning: `location_policy missing from user/config/profile.md — gate disabled, everything passes`.
 - Return `ALLOW`.
 
 If present, pull these fields (with defaults in case of partial config):
@@ -44,7 +44,7 @@ If present, pull these fields (with defaults in case of partial config):
 
 ## Step 2 — Read the JD header
 
-From `data/jds/{NUM}-*.md` take the five location header fields:
+From `user/data/jds/{NUM}-*.md` take the five location header fields:
 
 - `**Location:**`
 - `**Remote scope:**`
@@ -203,14 +203,14 @@ orchestrator will invoke `modes/_eval.md` next.
 
 ### SKIP
 
-1. Update the `data/applications.md` row for this NUM:
+1. Update the `user/data/applications.md` row for this NUM:
    - `Status` column → `Skipped-Location`
-   - `Notes` column → `{rule-id}: "{quoted JD sentence}"`
+   - `Notes` column → `{rule-id}: "{quoted JD sentence}"` (replace any `|` in the quote with `/` — a pipe splits the cell)
    - Leave `Score`, `PDF`, and `Report` empty.
 
 2. Return the string `SKIP:{rule-id}: "{quoted JD sentence}"` to the caller.
 
-3. Do NOT create a report. Do NOT drop a TSV in `data/tracker-additions/`.
+3. Do NOT create a report. Do NOT drop a TSV in `user/data/tracker-additions/`.
 
 The quoted sentence is mandatory — it's the candidate's audit trail. Never
 say "SKIP: remote restricted" without the exact quoted evidence.

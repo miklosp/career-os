@@ -5,8 +5,10 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"career-ops/dashboard/internal/model"
+	"career-ops/dashboard/internal/paths"
 )
 
 func TestSetStatusCell(t *testing.T) {
@@ -91,7 +93,8 @@ func TestUpdateApplicationStatus_FetchedRowNoReport(t *testing.T) {
 		"| # | Date | Company | Role | Score | Status | PDF | Report | Notes |\n" +
 		"|---|------|---------|------|-------|--------|-----|--------|-------|\n" +
 		"| 257 | 2026-04-30 | Guerrilla | Director |  | Fetched | ❌ |  |  |\n"
-	path := filepath.Join(dir, "applications.md")
+	path := paths.Data(dir, "applications.md")
+	os.MkdirAll(filepath.Dir(path), 0755)
 	if err := os.WriteFile(path, []byte(md), 0644); err != nil {
 		t.Fatal(err)
 	}
@@ -113,7 +116,8 @@ func TestUpdateApplicationStatus_FetchedRowNoReport(t *testing.T) {
 func TestUpdateApplicationStatus_NotFound(t *testing.T) {
 	dir := t.TempDir()
 	md := "| 1 | 2026-01-01 | Co | PM | 4.0/5 | Evaluated | ❌ | [1](r.md) | n |\n"
-	path := filepath.Join(dir, "applications.md")
+	path := paths.Data(dir, "applications.md")
+	os.MkdirAll(filepath.Dir(path), 0755)
 	os.WriteFile(path, []byte(md), 0644)
 
 	err := UpdateApplicationStatus(dir, model.CareerApplication{Number: 999}, "Applied")
@@ -174,5 +178,82 @@ func TestLeadingNum(t *testing.T) {
 				t.Errorf("LeadingNum(%q) = %q, want %q", tt.in, got, tt.want)
 			}
 		})
+	}
+}
+
+const outcomeHeader = "# Applications Tracker\n\n" +
+	"| # | Date | Company | Role | Score | Status | PDF | Report | Notes | Applied Date | Channel | Furthest Stage | Rejection Reason |\n" +
+	"|---|------|---------|------|-------|--------|-----|--------|-------|--------------|---------|----------------|------------------|\n"
+
+func TestParseApplications_OutcomeColumns(t *testing.T) {
+	dir := t.TempDir()
+	md := outcomeHeader +
+		"| 200 | 2026-06-02 | initech | PM | 4.1/5 | Rejected | ✅ |  | n | 2026-06-02 | referral | final | no reason given |\n" +
+		"| 201 | 2026-06-02 | Legacy | PM | 4.0/5 | Evaluated | ❌ |  | old row |\n"
+	os.MkdirAll(paths.Data(dir, "jds"), 0755)
+	os.WriteFile(paths.Data(dir, "applications.md"), []byte(md), 0644)
+	os.WriteFile(paths.Data(dir, "jds", "200-initech.md"),
+		[]byte("# initech — PM\n\n**Location:** Stockholm, Stockholm County, Sweden\n"), 0644)
+	os.WriteFile(paths.Data(dir, "jds", "201-legacy.md"),
+		[]byte("# Legacy — PM\n\n**Location:** Berlin, Germany\n"), 0644)
+
+	apps := ParseApplications(dir)
+	if len(apps) != 2 {
+		t.Fatalf("want 2 apps, got %d", len(apps))
+	}
+	if !apps[0].InSweden || apps[1].InSweden {
+		t.Errorf("InSweden: want true/false, got %v/%v", apps[0].InSweden, apps[1].InSweden)
+	}
+	a := apps[0]
+	if a.Notes != "n" || a.AppliedDate != "2026-06-02" || a.Channel != "referral" ||
+		a.FurthestStage != "final" || a.RejectionReason != "no reason given" {
+		t.Errorf("outcome not parsed: %+v", a)
+	}
+	if apps[1].Notes != "old row" || apps[1].AppliedDate != "" {
+		t.Errorf("legacy row misparsed: %+v", apps[1])
+	}
+}
+
+func TestUpdateApplicationStatus_AppliedFillsDateOnce(t *testing.T) {
+	dir := t.TempDir()
+	md := outcomeHeader +
+		"| 300 | 2026-06-02 | Acme | PM | 4.1/5 | Evaluated | ✅ |  | n |  |  |  |  |\n" +
+		"| 301 | 2026-06-02 | Beta | PM | 4.1/5 | Evaluated | ✅ |  | n | 2026-05-01 | referral | none |  |\n"
+	path := paths.Data(dir, "applications.md")
+	os.MkdirAll(filepath.Dir(path), 0755)
+	os.WriteFile(path, []byte(md), 0644)
+
+	for _, n := range []int{300, 301} {
+		if err := UpdateApplicationStatus(dir, model.CareerApplication{Number: n}, "Applied"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	out, _ := os.ReadFile(path)
+	today := time.Now().Format("2006-01-02")
+	if !strings.Contains(string(out), "| Applied | ✅ |  | n | "+today+" |  |  |  |") {
+		t.Errorf("applied date not filled on #300:\n%s", out)
+	}
+	if !strings.Contains(string(out), "| Applied | ✅ |  | n | 2026-05-01 | referral | none |  |") {
+		t.Errorf("recorded applied date overwritten on #301:\n%s", out)
+	}
+}
+
+func TestSwedenRegex(t *testing.T) {
+	yes := []string{
+		"Stockholm, Stockholm County, Sweden", "Sweden (Remote)", "Malmö, Skåne County, Sweden",
+		"Göteborg", "Stockholm HQ", "Solna, Stockholm County, SE", "Gothenburg | Munich , Germany",
+	}
+	no := []string{
+		"Berlin, Berlin, Germany", "Oslo, Norway", "Remote (EU)", "Lundby, Denmark", "London, Seattle",
+	}
+	for _, s := range yes {
+		if !reSweden.MatchString(s) {
+			t.Errorf("want Sweden match for %q", s)
+		}
+	}
+	for _, s := range no {
+		if reSweden.MatchString(s) {
+			t.Errorf("unexpected Sweden match for %q", s)
+		}
 	}
 }

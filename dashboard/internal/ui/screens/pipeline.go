@@ -2,8 +2,8 @@ package screens
 
 import (
 	"fmt"
+	"math"
 	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 
@@ -12,6 +12,7 @@ import (
 
 	"career-ops/dashboard/internal/data"
 	"career-ops/dashboard/internal/model"
+	"career-ops/dashboard/internal/paths"
 	"career-ops/dashboard/internal/theme"
 )
 
@@ -29,7 +30,7 @@ func hasPendingReview(careerOpsPath string, app model.CareerApplication) bool {
 	if base == "" {
 		return false
 	}
-	reviewPath := filepath.Join(careerOpsPath, "output", "customized-cvs", base+"-cv-review.json")
+	reviewPath := paths.Output(careerOpsPath, "customized-cvs", base+"-cv-review.json")
 	_, err := os.Stat(reviewPath)
 	return err == nil
 }
@@ -192,10 +193,11 @@ var statusOptions = []string{"Evaluated", "Applied", "Responded", "Interview", "
 var statusGroupOrder = []string{"interview", "offer", "responded", "applied", "evaluated", "fetched", "skipped-location", "skip", "rejected", "discarded"}
 
 // Bulk-prune threshold bounds. The modal opens at the default cutoff and the
-// user can nudge it within these bounds before confirming.
+// user can nudge it within these bounds before confirming. The threshold is
+// rounded to one decimal after every step so repeated 0.1 nudges don't drift.
 const (
 	defaultPruneThreshold = 3.0
-	pruneThresholdStep    = 0.5
+	pruneThresholdStep    = 0.1
 	minPruneThreshold     = 0.5
 	maxPruneThreshold     = 5.0
 )
@@ -641,7 +643,7 @@ func (m PipelineModel) handleKey(msg tea.KeyMsg) (PipelineModel, tea.Cmd) {
 					}
 				}
 			}
-			fullPath := filepath.Join(m.careerOpsPath, app.ReportPath)
+			fullPath := paths.User(m.careerOpsPath, app.ReportPath)
 			title := fmt.Sprintf("%s — %s", app.Company, app.Role)
 			jobURL := app.JobURL
 			return m, func() tea.Msg {
@@ -795,13 +797,13 @@ func (m PipelineModel) handlePruneConfirm(msg tea.KeyMsg) (PipelineModel, tea.Cm
 		return m, nil
 
 	case "up", "k":
-		m.pruneThreshold += pruneThresholdStep
+		m.pruneThreshold = math.Round((m.pruneThreshold+pruneThresholdStep)*10) / 10
 		if m.pruneThreshold > maxPruneThreshold {
 			m.pruneThreshold = maxPruneThreshold
 		}
 
 	case "down", "j":
-		m.pruneThreshold -= pruneThresholdStep
+		m.pruneThreshold = math.Round((m.pruneThreshold-pruneThresholdStep)*10) / 10
 		if m.pruneThreshold < minPruneThreshold {
 			m.pruneThreshold = minPruneThreshold
 		}
@@ -1255,11 +1257,12 @@ func (m PipelineModel) renderAppLine(app model.CareerApplication, selected bool)
 	numW := 4
 	scoreW := 5
 	dateW := 5 // MM/DD
+	svW := 2   // "SV" when the job is located in Sweden
 	companyW := 16
 	statusW := 12
 	cvW := 7 // "Gen…" / "Rev…" / "Review" / "PDF ✓" / "PDF ✗" + 1 trailing pad
-	// Role gets remaining space (scoreW + dateW + numW + companyW + statusW + cvW + 7 separators/padding)
-	roleW := m.width - numW - scoreW - dateW - companyW - statusW - cvW - 11
+	// Role gets remaining space (scoreW + dateW + numW + svW + companyW + statusW + cvW + 8 separators/padding)
+	roleW := m.width - numW - scoreW - dateW - svW - companyW - statusW - cvW - 12
 	if roleW < 15 {
 		roleW = 15
 	}
@@ -1285,11 +1288,22 @@ func (m PipelineModel) renderAppLine(app model.CareerApplication, selected bool)
 	scoreStyle := withBg(m.scoreStyle(app.Score).Width(scoreW))
 	score := scoreStyle.Render(fmt.Sprintf("%.1f", app.Score))
 
+	// The APPLIED tab dates each row by when the candidate applied, not when
+	// the JD entered the tracker.
 	dateText := formatDateMMDD(app.Date)
+	if pipelineTabs[m.activeTab].filter == filterApplied {
+		dateText = formatDateMMDD(app.AppliedDate)
+	}
 	if dateText == "" {
 		dateText = "—"
 	}
 	dateStyle := withBg(lipgloss.NewStyle().Foreground(m.theme.Subtext).Width(dateW))
+
+	svText := ""
+	if app.InSweden {
+		svText = "SV"
+	}
+	svStyle := withBg(lipgloss.NewStyle().Foreground(m.theme.Sky).Width(svW))
 
 	company := truncateRunes(app.Company, companyW)
 	companyStyle := withBg(lipgloss.NewStyle().Foreground(m.theme.Text).Width(companyW))
@@ -1318,6 +1332,7 @@ func (m PipelineModel) renderAppLine(app model.CareerApplication, selected bool)
 	line := sep + score + sep +
 		dateStyle.Render(truncateRunes(dateText, dateW)) + sep +
 		numStyle.Render(truncateRunes(numText, numW)) + sep +
+		svStyle.Render(svText) + sep +
 		companyStyle.Render(company) + sep +
 		roleStyle.Render(role) + sep +
 		statusText + sep + cvText

@@ -1,0 +1,14 @@
+# Private career-ops user data. Tracked in full except transient/OS noise.
+.DS_Store
+# next-num.mjs reservation locks (transient; orphans only advance the counter)
+data/jds/*.reserved
+# dashboard diagnostic log for failed CV steps
+output/customized-cvs/cvgen.log
+# SQLite WAL side files (transient)
+data/scan-history.db-shm
+data/scan-history.db-wal
+# Backups written by dedup/reconcile runs (recover from git history instead)
+data/applications.md.bak*
+data/.reconcile-bak-*
+# Processed tracker-additions TSVs (already merged into applications.md)
+data/tracker-additions/merged/
