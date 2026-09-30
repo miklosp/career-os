@@ -326,7 +326,15 @@ let skipped = 0;
 const newLines = [];
 
 for (const file of tsvFiles) {
-  const content = readFileSync(join(ADDITIONS_DIR, file), "utf-8").trim();
+  // Eval agents sometimes leak the Write tool's closing </content> tag.
+  const content = readFileSync(join(ADDITIONS_DIR, file), "utf-8")
+    .replace(/\n<\/content>\s*$/, "")
+    .trim();
+  if (content.includes("\n")) {
+    console.warn(`⚠️  Skipping multi-line TSV ${file}: must be a single line`);
+    skipped++;
+    continue;
+  }
   const addition = parseTsvContent(content, file);
   if (!addition) {
     skipped++;
