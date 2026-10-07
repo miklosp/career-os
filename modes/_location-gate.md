@@ -10,8 +10,10 @@ when a role can't work geographically, skip it with the evidence quoted.
 fires SKIP for any JD written outside `jd_languages`, for any JD whose
 `**Remote scope:** onsite:City` / `hybrid:City` header points at a country
 outside `home_country` (and not literally listed in `remote_allowed_scopes`),
-and for any `unspecified`-scope JD whose `**Location:**` names such a country
-while the body never mentions remote work (Rule 8).
+for any `unspecified`-scope JD whose `**Location:**` names such a country
+while the body never mentions remote work (Rule 8), and for a hard,
+candidate-directed residency sentence naming a non-eligible country (Rule 6,
+e.g. "open to fully remote candidates based anywhere in France").
 If it returns ALLOW or SKIP, this file is not read. It only falls through to
 this LLM gate on `NEEDS_LLM` — i.e. when the JD's language is undetermined, or
 its structured scope is missing or ambiguous and the body needs human-style
@@ -217,6 +219,7 @@ say "SKIP: remote restricted" without the exact quoted evidence.
 
 ## Rules of the road
 
+- **Decide the gate on geography alone, before judging fit.** A strong match never softens a restriction: if the JD ties the role to a non-eligible country (residency, "hybrid from {city}" with no remote alternative, a single-country Location with no remote wording), SKIP even when the role scores well.
 - **Never skip on ambiguity.** If a location field is `unspecified` and no rule has hard evidence, return ALLOW. Scoring will handle soft location concerns in Block C (Cultural Signals).
 - **One rule, one evidence.** Don't concatenate multiple rule failures. Report the first SKIP cleanly.
 - **Quote the JD exactly.** No paraphrasing. The dashboard shows this string verbatim in the SKIP filter.
