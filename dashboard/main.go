@@ -333,13 +333,19 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case screens.PipelineMergeMsg:
 		// Run `node merge-tracker.mjs` synchronously to fold pending TSVs
-		// into applications.md, then trigger a full pipeline refresh so the
-		// promoted rows (Fetched → Evaluated) show up immediately.
+		// into applications.md, then `node lib/dedup-tracker.mjs` (dedup
+		// needs the merged state, so it only runs if the merge succeeded),
+		// then trigger a full pipeline refresh so the promoted rows
+		// (Fetched → Evaluated) show up immediately.
 		careerOpsPath := msg.CareerOpsPath
 		return m, func() tea.Msg {
 			cmd := exec.Command("node", "merge-tracker.mjs")
 			cmd.Dir = careerOpsPath
-			_ = cmd.Run()
+			if cmd.Run() == nil {
+				dedup := exec.Command("node", "lib/dedup-tracker.mjs")
+				dedup.Dir = careerOpsPath
+				_ = dedup.Run()
+			}
 			return screens.PipelineRefreshMsg{}
 		}
 

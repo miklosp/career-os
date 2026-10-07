@@ -96,7 +96,8 @@ type PipelineRefreshMsg struct{}
 type PipelineOpenProgressMsg struct{}
 
 // PipelineMergeMsg is emitted when the user runs `node merge-tracker.mjs`
-// to fold pending data/tracker-additions/*.tsv into applications.md.
+// to fold pending data/tracker-additions/*.tsv into applications.md
+// (followed by `node lib/dedup-tracker.mjs`).
 type PipelineMergeMsg struct {
 	CareerOpsPath string
 }
