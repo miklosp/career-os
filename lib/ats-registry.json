@@ -679,6 +679,53 @@
       "note": "custom Next.js careers page (getencube.com), no ATS API/JSON-LD; JD body SSR'd in a class=\"wysiwyg\" div, plain xh GET is enough",
       "source": "learned",
       "added": "2026-09-23"
+    },
+    {
+      "match": "career.billogram.com",
+      "matchType": "host",
+      "handler": "xh",
+      "params": {},
+      "note": "custom domain fronting Teamtailor; JSON-LD JobPosting embedded directly on page",
+      "source": "learned",
+      "added": "2026-09-24"
+    },
+    {
+      "match": "veriff.com",
+      "matchType": "host",
+      "handler": "greenhouse",
+      "params": {
+        "org": "veriff"
+      },
+      "note": "veriff.com/careers/position/{id}?gh_jid={id} fronts Greenhouse board veriff",
+      "source": "learned",
+      "added": "2026-09-29"
+    },
+    {
+      "match": "career.mynt.com",
+      "matchType": "host",
+      "handler": "teamtailor",
+      "params": {},
+      "note": "Mynt Teamtailor career site",
+      "source": "learned",
+      "added": "2026-10-06"
+    },
+    {
+      "match": "jobs.qred.com",
+      "matchType": "host",
+      "handler": "teamtailor",
+      "params": {},
+      "note": "Qred Teamtailor custom domain",
+      "source": "learned",
+      "added": "2026-10-06"
+    },
+    {
+      "match": "career.magma.se",
+      "matchType": "host",
+      "handler": "teamtailor",
+      "params": {},
+      "note": "Magma Math Teamtailor custom domain (xh gets 404 from plain UA; verify handler)",
+      "source": "learned",
+      "added": "2026-10-06"
     }
   ]
 }
