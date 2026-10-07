@@ -772,7 +772,7 @@ async function main() {
     console.log(
       `LinkedIn (JobSpy):     ${linkedinStats.searches} searches, ${linkedinStats.idsReturned} ids, ${linkedinStats.afterTitleFilter} after title filter`,
     );
-    console.log(`  Prefetched JDs:      ${linkedinStats.prefetched}`);
+    console.log(`  Prefetched JDs:      ${linkedinStats.prefetched} (${linkedinStats.atsJd ?? 0} from employer ATS)`);
     console.log(`  Skipped (title):     ${linkedinStats.skipped}`);
     console.log(`  Banned skipped:      ${linkedinStats.banned ?? 0}`);
     console.log(
@@ -805,7 +805,7 @@ async function main() {
     console.log(`  Skipped (title):     ${pmStats.skippedTitle}`);
     console.log(`  Skipped (geo):       ${pmStats.skippedGeo ?? 0}`);
     console.log(`  Banned skipped:      ${pmStats.banned ?? 0}`);
-    console.log(`  Prefetched JDs:      ${pmStats.prefetched} (${pmStats.atsResolved ?? 0} ATS-resolved)`);
+    console.log(`  Prefetched JDs:      ${pmStats.prefetched} (${pmStats.atsResolved ?? 0} ATS-resolved, ${pmStats.atsJd ?? 0} from employer ATS)`);
   }
   if (pbStats) {
     console.log(
