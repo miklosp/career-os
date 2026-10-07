@@ -119,9 +119,8 @@ are fine:
 1. **What you bring:** "What do you bring to this team that would make it a
    mistake for them not to talk to you?" (a capability plus the system it
    builds, and the product outcome it produces; not a first-90-days plan)
-2. **Story:** "I'd use {top story} as the proof. Right one? And what's the
-   moment in it you'd tell over coffee?" (offer the top one or two from the
-   ranking; the candidate may name another)
+2. **Story:** "I'd use {top story} as the proof. Right one?" (offer the top
+   one or two from the ranking; the candidate may name another)
 3. **Their problem:** "Is there anything in the JD that tells you what they're
    actually struggling with, or is it generic?"
 

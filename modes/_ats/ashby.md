@@ -55,6 +55,7 @@ Per-ATS mechanics reference loaded by `modes/apply.md` when an application form 
 - **Some Ashby forms are fully factual** - name, email, resume, LinkedIn, work-auth Yes/No, notice period, salary - with no cover letter and no narrative question at all (Weaviate, 2026-08-20). Check the field inventory before drafting anything; the tailored CV may be the entire application.
 - **Weaviate caps applications at 3 per 30-day span** across all their jobs, stated on the form itself. Other Ashby orgs may set similar limits - read the banner above the form.
 - **Camunda caps applications at 2 per 30-day span** across all their jobs, plus no re-apply to the same role within 60 days without an offer (stated on the form). Same banner pattern as Weaviate's 3-per-30.
+- **Lovable blocks re-applying to the same position for 6 months**, and nothing on the form warns you: the block only appears after Submit, as a rejection message (#3773, 2026-09-30). Reposted Lovable roles keep the same Ashby job id, so compare the form URL against earlier Lovable report Section G entries before filling.
 - Ashby has **no normalizer in the fill path** -> apply `modes/_writing.md` section 5 Unicode substitutions by hand (straight quotes, no em/en dash) before filling browser text.
 
 ## agent-browser (WKWebView) fallback path

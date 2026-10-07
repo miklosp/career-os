@@ -50,8 +50,9 @@ section in the report file **in place**. Block A only — **zero WebSearch**.
 
 Read the `[gap]` criteria from the report. Ask **one** `AskUserQuestion`
 (`multiSelect`): "Which of these do you actually have evidence for?", listing the
-gaps as options (**max 4 per call**; a second call only if there are more than 4
-gaps). For each gap the user selects, let them dictate the evidence
+gaps as options plus a final **None, keep all as gaps** option (**max 4 options
+per call**, so at most 3 gaps per call; a further call only if there are more).
+An empty answer also means none. For each gap the user selects, let them dictate the evidence
 conversationally, then:
 
 1. **Append** to `user/config/notes.yml` (schema: header of
