@@ -14,6 +14,7 @@
 | Recruitee | `{company}.recruitee.com` (form at `/c/new`) | `modes/_ats/recruitee.md` |
 | Deel | `jobs.deel.com` (form at `/deel/job-details/{uuid}/application`) | `modes/_ats/deel.md` |
 | YC job pages | `www.ycombinator.com/companies/<co>/jobs/<id>` | `modes/_ats/yc.md` |
+| Workday | `{tenant}.wd{N}.myworkdayjobs.com` (open `/job/{slug}`, not `/details/{slug}`) | `modes/_ats/workday.md` |
 | LinkedIn Easy Apply | `www.linkedin.com/jobs/view/{id}` with an Easy Apply button | `modes/_ats/linkedin.md` |
 
 ## Cross-ATS rules

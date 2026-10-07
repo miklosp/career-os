@@ -82,6 +82,7 @@ Identify the ATS from the form host, then **read the matching file** before your
 | `*.teamtailor.com` | `modes/_ats/teamtailor.md` |
 | `*.recruitee.com` | `modes/_ats/recruitee.md` |
 | `jobs.deel.com` | `modes/_ats/deel.md` |
+| `*.myworkdayjobs.com` | `modes/_ats/workday.md` |
 | `ycombinator.com/companies/*/jobs/*` | `modes/_ats/yc.md` |
 
 `modes/_ats/README.md` carries the cross-ATS rules that hold everywhere (command syntax, verification discipline, shell traps) - read it too the first time you touch a form in a session.
