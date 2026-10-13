@@ -726,6 +726,35 @@
       "note": "Magma Math Teamtailor custom domain (xh gets 404 from plain UA; verify handler)",
       "source": "learned",
       "added": "2026-10-06"
+    },
+    {
+      "match": "jobs.funnel.io",
+      "matchType": "host",
+      "handler": "teamtailor",
+      "params": {},
+      "note": "Funnel careers site on Teamtailor custom domain (jobs.funnel.io/jobs/{id}-{slug})",
+      "source": "learned",
+      "added": "2026-10-12"
+    },
+    {
+      "match": "jobs.tibber.com",
+      "matchType": "host",
+      "handler": "teamtailor",
+      "params": {},
+      "note": "Tibber careers page on Teamtailor custom domain",
+      "source": "learned",
+      "added": "2026-10-12"
+    },
+    {
+      "match": "stripe.com",
+      "matchType": "host",
+      "handler": "greenhouse",
+      "params": {
+        "org": "stripe"
+      },
+      "note": "careers listing fronting Greenhouse board; listing id == gh job id",
+      "source": "learned",
+      "added": "2026-10-12"
     }
   ]
 }
