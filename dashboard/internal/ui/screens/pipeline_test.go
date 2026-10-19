@@ -1,12 +1,16 @@
 package screens
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
 	"career-ops/dashboard/internal/model"
+	"career-ops/dashboard/internal/paths"
 	"career-ops/dashboard/internal/theme"
 )
 
@@ -158,5 +162,52 @@ func TestRenderAppLineAppliedTabShowsAppliedDateAndSV(t *testing.T) {
 	line = pm.renderAppLine(app, false)
 	if !strings.Contains(line, "04/13") || strings.Contains(line, "SV") {
 		t.Fatalf("other tabs keep the tracker date and no SV marker, got %q", line)
+	}
+}
+
+func TestLoadCurrentReportReloadsRewrittenReport(t *testing.T) {
+	repo := t.TempDir()
+	report := "data/reports/001-acme.md"
+	full := paths.User(repo, report)
+	if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(full, []byte("**Summary:** no JD\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	pm := NewPipelineModel(
+		theme.NewTheme("catppuccin-mocha"),
+		[]model.CareerApplication{{Company: "Acme", Status: "Evaluated", Score: 4.2, ReportPath: report}},
+		model.PipelineMetrics{Total: 1},
+		repo,
+		120,
+		40,
+	)
+	pm.viewMode = "flat"
+	pm.applyFilterAndSort()
+	load := func() (PipelineLoadReportMsg, bool) {
+		cmd := pm.loadCurrentReport()
+		if cmd == nil {
+			return PipelineLoadReportMsg{}, false
+		}
+		return cmd().(PipelineLoadReportMsg), true
+	}
+
+	msg, ok := load()
+	if !ok {
+		t.Fatal("expected first visit to load the report")
+	}
+	pm.EnrichReport(msg.ReportPath, "no JD", "", msg.ModTime)
+	if _, ok := load(); ok {
+		t.Fatal("expected unchanged report to be served from cache")
+	}
+
+	later := time.Now().Add(time.Hour)
+	if err := os.Chtimes(full, later, later); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := load(); !ok {
+		t.Fatal("expected rewritten report to be reloaded")
 	}
 }

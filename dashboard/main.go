@@ -95,7 +95,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case screens.PipelineLoadReportMsg:
 		summary, location := data.LoadReportSummary(msg.CareerOpsPath, msg.ReportPath)
-		m.pipeline.EnrichReport(msg.ReportPath, summary, location)
+		m.pipeline.EnrichReport(msg.ReportPath, summary, location, msg.ModTime)
 		return m, nil
 
 	case screens.PipelineUpdateStatusMsg:
@@ -848,9 +848,10 @@ func main() {
 		if app.ReportPath == "" {
 			continue
 		}
+		modTime := data.ReportModTime(careerOpsPath, app.ReportPath)
 		summary, location := data.LoadReportSummary(careerOpsPath, app.ReportPath)
 		if summary != "" || location != "" {
-			pm.EnrichReport(app.ReportPath, summary, location)
+			pm.EnrichReport(app.ReportPath, summary, location, modTime)
 		}
 	}
 

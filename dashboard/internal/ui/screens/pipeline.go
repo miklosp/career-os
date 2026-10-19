@@ -6,6 +6,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -74,6 +75,7 @@ type PipelineTailorMsg struct {
 type PipelineLoadReportMsg struct {
 	CareerOpsPath string
 	ReportPath    string
+	ModTime       time.Time
 }
 
 // PipelineUpdateStatusMsg requests a status update for an application.
@@ -138,6 +140,7 @@ type PDFRenderedMsg struct {
 type reportSummary struct {
 	summary  string
 	location string
+	modTime  time.Time // report file mtime when read; a newer one invalidates the entry
 }
 
 // Sort modes
@@ -371,10 +374,11 @@ func (m *PipelineModel) CopyCVGenStatus(other *PipelineModel) {
 }
 
 // EnrichReport caches report summary data for preview.
-func (m *PipelineModel) EnrichReport(reportPath, summary, location string) {
+func (m *PipelineModel) EnrichReport(reportPath, summary, location string, modTime time.Time) {
 	m.reportCache[reportPath] = reportSummary{
 		summary:  summary,
 		location: location,
+		modTime:  modTime,
 	}
 }
 
@@ -875,13 +879,16 @@ func (m PipelineModel) loadCurrentReport() tea.Cmd {
 	if !ok || app.ReportPath == "" {
 		return nil
 	}
-	if _, cached := m.reportCache[app.ReportPath]; cached {
+	// Reports get rewritten in place (re-evaluation), so the cache is keyed on
+	// path + mtime, not path alone.
+	modTime := data.ReportModTime(m.careerOpsPath, app.ReportPath)
+	if cached, ok := m.reportCache[app.ReportPath]; ok && cached.modTime.Equal(modTime) {
 		return nil
 	}
 	path := m.careerOpsPath
 	report := app.ReportPath
 	return func() tea.Msg {
-		return PipelineLoadReportMsg{CareerOpsPath: path, ReportPath: report}
+		return PipelineLoadReportMsg{CareerOpsPath: path, ReportPath: report, ModTime: modTime}
 	}
 }
 

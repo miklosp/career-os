@@ -756,6 +756,15 @@ func LoadReportSummary(careerOpsPath, reportPath string) (summary, location stri
 	return
 }
 
+// ReportModTime returns the report file's mtime, or the zero time if it is unreadable.
+func ReportModTime(careerOpsPath, reportPath string) time.Time {
+	info, err := os.Stat(paths.User(careerOpsPath, reportPath))
+	if err != nil {
+		return time.Time{}
+	}
+	return info.ModTime()
+}
+
 // UpdateApplicationStatus updates the status of an application in applications.md.
 func UpdateApplicationStatus(careerOpsPath string, app model.CareerApplication, newStatus string) error {
 	filePath := paths.Data(careerOpsPath, "applications.md")
