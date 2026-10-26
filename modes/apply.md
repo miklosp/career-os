@@ -19,12 +19,13 @@ If a required input is missing — no report path, no form URL — **ask the use
 
 ## Browser prerequisite
 
-Apply is the **one** mode that prefers the **cmux browser** over agent-browser. Decide once at the start of the flow and stick to it for the whole session:
+Apply is the **one** mode that prefers the terminal's **built-in browser** (cmux or Ghostex) over a standalone agent-browser. Decide once at the start of the flow and stick to it for the whole session:
 
 - **`CMUX_WORKSPACE_ID` is set** *and* `cmux` is on PATH → **cmux path (preferred)**.
+- Else **`GHOSTEX_GLOBAL_SESSION_REF` is set** *and* `ghostex` is on PATH → **Ghostex path**.
 - Otherwise → **agent-browser fallback** (the original ephemeral headed-Chromium path).
 
-This preference is scoped to apply only. Fetch / scan / scoring never use cmux — they keep agent-browser / Firecrawl / Playwright unchanged.
+This preference is scoped to apply only. Fetch / scan / scoring never use cmux or Ghostex — they keep agent-browser / Firecrawl / Playwright unchanged.
 
 ### cmux path (preferred)
 
@@ -55,7 +56,24 @@ cmux browser surface:7 click eN
 
 **Never close the surface.** It is the candidate's persistent browser, not an ephemeral session. There is no teardown step in the cmux path (Step 6.3 applies to the agent-browser fallback only).
 
-### agent-browser fallback (no cmux)
+### Ghostex path
+
+The form opens in a visible Ghostex built-in browser pane in this project, on the candidate's persistent Ghostex profile. It is driven by **agent-browser attached over CDP** to Ghostex's embedded Chromium (port `9334`, or `$GHOSTEX_CEF_REMOTE_DEBUGGING_PORT` when set), so every agent-browser command — including `upload` — works. Plain localhost TCP: no sandbox bridge needed.
+
+Verify once: `xh -b 127.0.0.1:9334/json/version` returns a `Browser: Chrome/…` object. If it errors → **agent-browser fallback**.
+
+```bash
+ghostex browser open "<Form URL>" --reuse exact          # visible pane in this project
+agent-browser --session gx-apply --cdp 9334 tab list     # find the tab showing the Form URL
+agent-browser --session gx-apply --cdp 9334 tab tN       # select it
+agent-browser --session gx-apply --cdp 9334 snapshot -i  # @eN refs
+```
+
+- **`--session gx-apply`, never `--session-name`.** `--session-name` turns on agent-browser's restore, which replays its saved cookies/storage into the candidate's Ghostex profile.
+- **Other tabs in the pane are the candidate's** (e.g. their logged-in LinkedIn). Select the form tab by URL and never act on, navigate, or close any other.
+- Screenshots can render page text black-on-black; verify values with `eval`, as Step 5 requires anyway.
+
+### agent-browser fallback (no cmux or Ghostex)
 
 Apply spawns an ephemeral headed Chromium via `agent-browser --session-name apply --headed`. No shared CDP port, no detect/ensure/launch dance, no profile collisions with fetch. The session name persists ATS cookies between apply runs (so a saved LinkedIn or Workday login survives), but the browser process itself starts fresh each session and **must** be torn down at the end of the apply flow (see Step 6.3).
 
@@ -89,14 +107,15 @@ Identify the ATS from the form host, then **read the matching file** before your
 
 **No playbook for this host?** Work the form normally, then write what you learned to `modes/_ats/{slug}.md` when the application is submitted, in the same shape as the existing files. That file is the deliverable that makes the next application on that ATS cheap.
 
-## Rules (both browsers)
+## Rules (every browser path)
 
 - NEVER click the Submit/Send/Apply button. Fill everything, take a final screenshot, hand off to the candidate.
 - Do not tick consent checkboxes that imply agreement to policies the candidate hasn't read — leave those for the candidate.
 - Resume / CV PDF upload — the PDF path is handed to you in the dispatch (`CV PDF:`):
   - **cmux path:** no upload command — give the candidate the exact PDF path and ask them to attach it themselves in the visible surface.
+  - **Ghostex path:** `agent-browser --session gx-apply --cdp 9334 upload @eN "<CV PDF path>"`.
   - **agent-browser fallback:** `agent-browser --session-name apply upload @eN "<CV PDF path>"`.
-- After fill, screenshot top and bottom of the form to `/tmp/career-apply-screens/{NUM}-*.png` and present both to the candidate for review (`cmux browser surface:N screenshot --out <path>` or `agent-browser --session-name apply screenshot`).
+- After fill, screenshot top and bottom of the form to `/tmp/career-apply-screens/{NUM}-*.png` and present both to the candidate for review (`cmux browser surface:N screenshot --out <path>`, `agent-browser --session gx-apply --cdp 9334 screenshot <path>`, or `agent-browser --session-name apply screenshot`).
 
 ## Fallback — no browser control
 
@@ -122,7 +141,12 @@ Open the **Form URL** from the dispatch. Pick the browser path once (see Browser
 2. `cmux browser surface:N snapshot -i` — grab bare `eN` refs for every interactive element.
 3. Confirm the page landed: `cmux browser surface:N get url` + the snapshot header.
 
-**agent-browser fallback (no cmux):**
+**Ghostex path (`GHOSTEX_GLOBAL_SESSION_REF` set):**
+1. `ghostex browser open "<Form URL>" --reuse exact` — opens a visible pane in this project.
+2. `agent-browser --session gx-apply --cdp 9334 tab list`, then `tab tN` on the tab showing the Form URL.
+3. `agent-browser --session gx-apply --cdp 9334 snapshot -i` — grab `@eN` refs; confirm the page from the snapshot header.
+
+**agent-browser fallback (no cmux or Ghostex):**
 1. `agent-browser --session-name apply --headed open "<Form URL>"` — spawns the headed browser on first call; subsequent commands reuse it within the session.
 2. `agent-browser --session-name apply snapshot -i` — grab `@eN` refs for every interactive element.
 3. Confirm the page from the snapshot header.
@@ -211,12 +235,14 @@ Notes:
 
 Fill each field only after its answer has cleared both passes.
 - **cmux:** `cmux browser surface:N fill eN "..."` / `cmux browser surface:N click eN`
+- **Ghostex:** `agent-browser --session gx-apply --cdp 9334 fill @eN "..."`
 - **agent-browser:** `agent-browser --session-name apply fill @eN "..."`
 
 Browser-filled text has no normalizer in its path — apply the `modes/_writing.md` §5 Unicode substitutions by hand before filling.
 
 **CV PDF upload.** The path is in the dispatch (`CV PDF:`).
 - **cmux path:** no upload command — give the candidate that exact path and ask them to attach it in the visible surface.
+- **Ghostex path:** `agent-browser --session gx-apply --cdp 9334 upload @eN "<CV PDF path>"`.
 - **agent-browser fallback:** `agent-browser --session-name apply upload @eN "<CV PDF path>"`.
 
 **Proofread the candidate's own edits before Submit.** When the candidate hands back their own rewrite of a letter or a free-text answer, do not treat "as edited by me" as final and clean. Their rewrites beat the draft on substance - they replace the framing with the motivation he actually holds - but they are typed straight into a browser textarea with no normalizer in the path, so they arrive with mechanical errors. On one application an edited letter carried four into a form about to be submitted: `similiar`, "agents that earns the trust", a present-tense overclaim ("the features I shipped ensure a 100 percent renewal rate" - `acme-b10` only supports "achieving 100% contract renewal rate"), and a curly apostrophe. All four fixes were accepted.
@@ -226,7 +252,7 @@ Browser-filled text has no normalizer in its path — apply the `modes/_writing.
 - Check any metric phrasing back against its `[src: id]` evidence - their edits sometimes tighten a claim into a stronger causal assertion than the source supports.
 - Present the errors as a short before/after table naming the issue, then apply on one confirmation. **Fix errors only** - never re-impose your own wording on their voice.
 
-When every field is filled, screenshot the top and bottom of the form to `/tmp/career-apply-screens/{NUM}-*.png` (`cmux browser surface:N screenshot --out <path>` or `agent-browser --session-name apply screenshot`) and present both to the candidate.
+When every field is filled, screenshot the top and bottom of the form to `/tmp/career-apply-screens/{NUM}-*.png` (`cmux browser surface:N screenshot --out <path>`, `agent-browser --session gx-apply --cdp 9334 screenshot <path>`, or `agent-browser --session-name apply screenshot`) and present both to the candidate.
 
 **STOP. Never click Submit/Send/Apply.** The candidate reviews and submits.
 
@@ -245,7 +271,7 @@ When the candidate confirms they submitted (or says they did it themselves):
    That directory is the only corpus of accepted letters and feeds the next
    draft.
 
-3. **Tear down the apply browser — agent-browser fallback ONLY.** If this session used agent-browser: `agent-browser close --session-name apply` — MANDATORY, not optional. The session-named cookies stay on disk for the next run; only the Chromium process exits. Skipping this is how processes leak. If the candidate wants to keep the window open to copy something, ask, then close. **If this session used the cmux path: do NOT close anything** — the surface is the candidate's persistent browser. There is no teardown.
+3. **Tear down the apply browser — agent-browser fallback ONLY.** If this session used agent-browser: `agent-browser close --session-name apply` — MANDATORY, not optional. The session-named cookies stay on disk for the next run; only the Chromium process exits. Skipping this is how processes leak. If the candidate wants to keep the window open to copy something, ask, then close. **If this session used the cmux path: do NOT close anything** — the surface is the candidate's persistent browser. There is no teardown. **Ghostex path:** `agent-browser --session gx-apply close` only detaches (agent-browser doesn't own Ghostex's browser); leave the pane and its tabs open.
 
 Section G is not a nice-to-have. It's the only record of what the candidate *actually* said, separate from the auto-generated draft in Step 4. If the candidate reopens this application six weeks later, or applies to another Ashby form at the same company, Section G is the battle-tested starting point.
 

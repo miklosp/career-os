@@ -19,13 +19,13 @@
 
 ## Cross-ATS rules
 
-Driving `cmux browser surface:N` for the apply mode, and the agent-browser (WKWebView) fallback:
+Driving `cmux browser surface:N` for the apply mode, and agent-browser (the Ghostex path over CDP, and the WKWebView fallback):
 
 - **zsh does NOT word-split unquoted `$var`.** `s="cmux browser surface:80"; $s fill eN "..."` runs a single bogus command token and fails. Write the full command literally each call.
 - **cmux `fill`/`click` need explicit `--selector`/`--text` flags.** The two-positional form (`fill "#id" "text"`) silently no-ops (returns `OK`, value stays empty). Use `fill --selector "#id" --text "..."` and `click --selector "#id"`. Broadly applicable to all cmux apply forms.
 - **Don't swallow stderr.** Use `2>&1 | grep -vi sentry`, not `2>/dev/null` - a successful fill prints `OK`; a failed one only shows its error on stderr. With `2>/dev/null` a broken fill looks like success. The cmux binary spews Sentry cache-path errors to stdout on macOS, which is what the filter is for.
 - **Always verify fills.** Single-line text inputs (Name, Email) silently no-op'd in one run while textareas succeeded; only the verification caught it. On the WKWebView fallback a screenshot is the check; on cmux Chromium surfaces screenshots render from the top of the DOM regardless of scroll, so read values back via `eval` instead (see the per-ATS playbooks).
 - **Snapshot refs (`eN`) regenerate on every `snapshot` call.** Take a fresh snapshot immediately before a fill batch; fills/scrolls don't invalidate refs, but a new snapshot does.
-- **No upload command** - give the candidate the PDF path and let them attach it; the cmux surface is their persistent browser (no teardown).
+- **cmux has no upload command** - give the candidate the PDF path and let them attach it; the cmux surface is their persistent browser (no teardown). agent-browser (Ghostex path, fallback) uploads with `upload @eN <path>`.
 - **LinkedIn `snapshot` is useless; `eval` works.** The snapshot returns only jump-menu skip-links, so LinkedIn forms must be enumerated and driven through `eval` - see `modes/_ats/linkedin.md`. For an off-site-apply LinkedIn job (`Easy apply: no`), do NOT try to click LinkedIn's Apply button - discover the employer ATS directly instead (web search `"<company>" jobs ashby/greenhouse/lever`, or check the JD's saved `LinkedIn job URL` / company careers).
 - **Handed careers-page URLs can be dead marketing pages.** Duvo's `duvo.ai/careers` had no form/listings; the real board was Ashby `jobs.ashbyhq.com/duvo`. If the form URL renders no application form, find the ATS board before giving up.

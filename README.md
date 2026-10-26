@@ -75,9 +75,9 @@ git clone <private-data-remote> user
 
 ## Applying from the dashboard (cmux + sandbox)
 
-The Go TUI's `a` key on a row starts the interactive apply flow in a dedicated, primed agent session. It is the one flow that prefers the **cmux browser** over `agent-browser` (visible surface, persistent logged-in profile). `o` (open the job URL) follows the same cmux-vs-host logic.
+The Go TUI's `a` key on a row starts the interactive apply flow in a dedicated, primed agent session. It is the one flow that prefers the terminal's built-in browser — **cmux**, else **Ghostex** (driven by `agent-browser --cdp 9334`, uploads included) — over a standalone `agent-browser` (visible surface, persistent logged-in profile). `o` (open the job URL) follows the same cmux-vs-host logic.
 
-**cmux detection — capability probe, not env var.** `CMUX_*` env vars are not a reliable signal: a sandbox can strip them. The dashboard instead probes `cmux current-workspace` (a control-socket round-trip, 3s timeout) — it succeeds only if cmux is actually drivable. When it fails, `a` degrades to opening the job URL in the host browser and `o` falls back to `open`/`xdg-open`/`start`.
+**cmux detection — env var + capability probe.** The dashboard requires `CMUX_WORKSPACE_ID` (it runs inside cmux; cmux automation mode would otherwise let the probe pass from any terminal) and then probes `cmux current-workspace` (a control-socket round-trip, 3s timeout) — it succeeds only if cmux is actually drivable. A sandbox strips `CMUX_*`, so a sandboxed dashboard skips cmux. When it fails, the dashboard tries **Ghostex** next: inside a Ghostex terminal (`GHOSTEX_GLOBAL_SESSION_REF` set and found in `ghostex sessions --json`), `a`/`t` open a new session in the dashboard's project via `ghostex create-session --input … --start` + `ghostex focus`, and `o` uses `ghostex browser open`. No sandbox bridge is needed — Ghostex is driven over localhost HTTP. When neither is available, `a` degrades to opening the job URL in the host browser and `o` falls back to `open`/`xdg-open`/`start`.
 
 **What `a` spawns.** A new focused cmux workspace in the repo, running the configured agent primed with a per-agent apply prompt:
 

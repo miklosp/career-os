@@ -52,9 +52,9 @@ type PipelineOpenURLMsg struct {
 }
 
 // PipelineApplyMsg is emitted when the user starts the live apply flow for the
-// selected app. When the dashboard runs inside cmux it spawns a new cmux
-// workspace (tab) running an interactive Claude Code session primed with
-// `/career-ops apply` for this row. Outside cmux it degrades to opening the
+// selected app. When the dashboard runs inside cmux (else Ghostex) it spawns a
+// new tab running an interactive Claude Code session primed with
+// `/career-ops apply` for this row. Outside both it degrades to opening the
 // job URL in the host browser.
 type PipelineApplyMsg struct {
 	CareerOpsPath string
@@ -63,8 +63,8 @@ type PipelineApplyMsg struct {
 
 // PipelineTailorMsg is emitted when the user starts the interactive CV-tailoring
 // flow for the selected app (`t`). It shares the apply launch machinery: inside
-// cmux it spawns a new workspace (tab) running an interactive session primed
-// with `/career-ops tailor {NUM}`; outside cmux it degrades to opening the job
+// cmux (else Ghostex) it spawns a new tab running an interactive session primed
+// with `/career-ops tailor {NUM}`; outside both it degrades to opening the job
 // URL in the host browser.
 type PipelineTailorMsg struct {
 	CareerOpsPath string

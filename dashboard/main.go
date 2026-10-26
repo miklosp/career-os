@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
@@ -353,12 +354,17 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		url := msg.URL
 		return m, func() tea.Msg {
 			// Inside a reachable cmux workspace, open the link in the cmux
-			// browser surface instead of the host OS browser.
+			// browser surface instead of the host OS browser; inside Ghostex,
+			// in its embedded browser pane for this project.
 			if cmuxBin, ok := cmuxReachable(); ok {
 				if err := exec.Command(cmuxBin, "browser", "open", url).Run(); err == nil {
 					return nil
 				}
 				// fall through to the host opener on failure
+			} else if gxBin, projectID, ok := ghostexReachable(); ok {
+				if err := exec.Command(gxBin, "browser", "open", url, "--project-id", projectID).Run(); err == nil {
+					return nil
+				}
 			}
 			var cmd *exec.Cmd
 			switch runtime.GOOS {
@@ -647,7 +653,8 @@ func resolveCustomizedCV(careerOpsPath, num string) string {
 
 // spawnAgentWorkspace launches an interactive, primed agent session for `app`.
 // Inside a reachable cmux it opens a new workspace (tab) titled `title` running
-// `launcher <prompt>` in the repo; outside cmux — or on spawn failure — it
+// `launcher <prompt>` in the repo; else inside Ghostex it opens a new session
+// (tab) in the dashboard's project; otherwise — or on spawn failure — it
 // degrades to opening the app's job URL in the host browser. Shared by the
 // apply (`a`) and tailor (`t`) launch paths, which differ only in workspace
 // title and primed prompt.
@@ -669,12 +676,13 @@ func resolveCustomizedCV(careerOpsPath, num string) string {
 // CMUX_* vars.
 func spawnAgentWorkspace(careerOpsPath, title, launcher, prompt string, app model.CareerApplication) tea.Cmd {
 	return func() tea.Msg {
-		if cmuxBin, ok := cmuxReachable(); ok {
-			shell := os.Getenv("SHELL")
-			if shell == "" {
-				shell = "/bin/zsh"
-			}
+		shell := os.Getenv("SHELL")
+		if shell == "" {
+			shell = "/bin/zsh"
+		}
+		inner := launcher + " " + shellQuote(prompt)
 
+		if cmuxBin, ok := cmuxReachable(); ok {
 			// Collect every CMUX_* name from our own (unsandboxed) environment
 			// so the wrapped session can re-create the caller context cmux needs
 			// for socket + workspace target.
@@ -700,7 +708,6 @@ func spawnAgentWorkspace(careerOpsPath, title, launcher, prompt string, app mode
 				sbPrefix += "SAFEHOUSE_ADD_DIRS=" + shellQuote(sockDir) + " "
 			}
 
-			inner := launcher + " " + shellQuote(prompt)
 			launch := sbPrefix + shell + " -ic " + shellQuote(inner)
 			// cmux types --command into the new tab's tty, and the macOS
 			// canonical-mode line buffer (MAX_CANON) drops input past 1024
@@ -718,9 +725,29 @@ func spawnAgentWorkspace(careerOpsPath, title, launcher, prompt string, app mode
 				os.Remove(script)
 			}
 			// fall through to host-browser degrade on failure
+		} else if gxBin, projectID, ok := ghostexReachable(); ok {
+			// Ghostex is driven over localhost HTTP, not a Unix socket, so no
+			// sandbox bridge is needed. --input is typed into the new tab like
+			// cmux --command, so the same short-script indirection applies.
+			if script, err := writeLaunchScript(shell + " -ic " + shellQuote(inner)); err == nil {
+				out, err := exec.Command(gxBin, "create-session", title,
+					"--project-id", projectID,
+					"--input", "/bin/sh "+shellQuote(script),
+					"--start").Output()
+				var created struct {
+					Session struct {
+						GlobalRef string `json:"globalRef"`
+					} `json:"session"`
+				}
+				if err == nil && json.Unmarshal(out, &created) == nil {
+					_ = exec.Command(gxBin, "focus", created.Session.GlobalRef).Run()
+					return nil
+				}
+				os.Remove(script)
+			}
 		}
 
-		// Not in cmux (or spawn failed): degrade to opening the job URL in the
+		// Not in cmux or Ghostex (or spawn failed): degrade to opening the job URL in the
 		// host browser — the user runs the flow manually from a terminal in the
 		// repo.
 		if app.JobURL == "" {
@@ -740,14 +767,18 @@ func spawnAgentWorkspace(careerOpsPath, title, launcher, prompt string, app mode
 	}
 }
 
-// cmuxReachable reports whether this process can actually drive cmux, and
-// returns the resolved cmux binary path. This is a capability probe, not an
-// env-var check: the CMUX_* environment is stripped by the `safe` sandbox and
-// the control socket path can be denied by sandbox policy, so a successful
-// `cmux current-workspace` round-trip is the only trustworthy signal that
-// `cmux browser open` / `cmux new-workspace` will work. The 3s timeout keeps
-// a wedged socket from freezing the TUI.
+// cmuxReachable reports whether this process runs inside cmux and can
+// actually drive it, and returns the resolved cmux binary path. Both checks
+// are needed: CMUX_WORKSPACE_ID marks "inside cmux" (cmux automation mode lets
+// `current-workspace` succeed from any terminal, e.g. a Ghostex tab), and the
+// `cmux current-workspace` round-trip proves the control socket answers (it
+// can be denied by sandbox policy). The dashboard runs unsandboxed, so its
+// CMUX_* env is intact; the `safe` sandbox strips it, so a sandboxed dashboard
+// skips cmux. The 3s timeout keeps a wedged socket from freezing the TUI.
 func cmuxReachable() (string, bool) {
+	if os.Getenv("CMUX_WORKSPACE_ID") == "" {
+		return "", false
+	}
 	bin, err := exec.LookPath("cmux")
 	if err != nil {
 		return "", false
@@ -758,6 +789,44 @@ func cmuxReachable() (string, bool) {
 		return "", false
 	}
 	return bin, true
+}
+
+// ghostexReachable reports whether the dashboard runs inside a live Ghostex
+// session, returning the ghostex binary and that session's project id (new
+// tabs land beside the dashboard). Ghostex sets GHOSTEX_GLOBAL_SESSION_REF in
+// every terminal it owns; the binary alone is on PATH everywhere, so the env
+// var is the "inside Ghostex" signal and the `sessions --json` round-trip
+// (3s timeout, like cmuxReachable) proves gxserver answers.
+func ghostexReachable() (string, string, bool) {
+	ref := os.Getenv("GHOSTEX_GLOBAL_SESSION_REF")
+	if ref == "" {
+		return "", "", false
+	}
+	bin, err := exec.LookPath("ghostex")
+	if err != nil {
+		return "", "", false
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, bin, "sessions", "--json").Output()
+	if err != nil {
+		return "", "", false
+	}
+	var list struct {
+		Sessions []struct {
+			GlobalRef string `json:"globalRef"`
+			ProjectID string `json:"projectId"`
+		} `json:"sessions"`
+	}
+	if json.Unmarshal(out, &list) != nil {
+		return "", "", false
+	}
+	for _, s := range list.Sessions {
+		if s.GlobalRef == ref {
+			return bin, s.ProjectID, true
+		}
+	}
+	return "", "", false
 }
 
 // shellQuote wraps s in POSIX single quotes so it survives as one argument
