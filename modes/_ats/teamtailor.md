@@ -28,3 +28,8 @@ Per-ATS mechanics reference loaded by `modes/apply.md` when an application form 
 
 - **File upload stays candidate-manual** (cmux has no upload command) - hand over the CV PDF path.
 - **Surface can close between turns** across a long review gap; `cmux browser surface:N eval` then returns `Error: Surface is not a browser` / `Missing or invalid surface_id`. Re-open with `cmux --json browser open` and re-fill from scratch - fills do not survive a lost surface.
+- **Ghostex path uploads work:** `agent-browser --session gx-apply --cdp 9334 upload '#candidate_resume_remote_url' <pdf>`. Teamtailor uploads the file remotely and clears the input, so `files.length` reads `0` afterwards. Verify by the filename text rendered next to "Upload CV" instead.
+
+## After submit
+
+- Some tenants (Flower #3989) redirect to `/applications/email_verification_needed`: the application only completes once the candidate clicks the link in the verification email. Tell the candidate, don't treat the redirect as done.
